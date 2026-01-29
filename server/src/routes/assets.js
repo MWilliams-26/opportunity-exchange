@@ -1,54 +1,47 @@
 const express = require('express');
 const db = require('../db/schema');
 const domainService = require('../services/domainService');
+const { asyncHandler, ValidationError } = require('../middleware/errorHandler');
+const validate = require('../middleware/validate');
 
 const router = express.Router();
 
-router.get('/search', async (req, res) => {
+router.get('/search', asyncHandler(async (req, res) => {
   const { keyword, limit = 10 } = req.query;
 
-  if (!keyword) {
-    return res.status(400).json({ error: 'Keyword is required' });
-  }
+  validate.required(keyword, 'keyword');
+  validate.string(keyword, 'keyword', { minLength: 1, maxLength: 63 });
 
-  try {
-    const domains = await domainService.searchAvailableDomains(keyword, parseInt(limit));
-    
-    const businessNameNote = await domainService.checkBusinessNameAvailability(keyword, null);
+  const parsedLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 50);
 
-    res.json({
-      domains,
-      businessName: businessNameNote,
-      meta: {
-        keyword,
-        source: 'dns_lookup',
-        accuracy: 'MVP - DNS-based check, not 100% accurate. Verify with registrar.',
-        supportedTlds: domainService.SUPPORTED_TLDS
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to search domains', details: err.message });
-  }
-});
+  const domains = await domainService.searchAvailableDomains(keyword, parsedLimit);
+  const businessNameNote = await domainService.checkBusinessNameAvailability(keyword, null);
 
-router.get('/check', async (req, res) => {
+  res.json({
+    domains,
+    businessName: businessNameNote,
+    meta: {
+      keyword,
+      source: 'dns_lookup',
+      accuracy: 'MVP - DNS-based check, not 100% accurate. Verify with registrar.',
+      supportedTlds: domainService.SUPPORTED_TLDS,
+    },
+  });
+}));
+
+router.get('/check', asyncHandler(async (req, res) => {
   const { domain } = req.query;
 
-  if (!domain) {
-    return res.status(400).json({ error: 'Domain is required' });
-  }
+  validate.required(domain, 'domain');
+  validate.domain(domain);
 
-  try {
-    const result = await domainService.checkDomainAvailability(domain);
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to check domain', details: err.message });
-  }
-});
+  const result = await domainService.checkDomainAvailability(domain);
+  res.json(result);
+}));
 
-router.get('/', (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const { keyword, type, maxPrice, category } = req.query;
-  
+
   let query = `
     SELECT a.*, c.name as category_name, c.slug as category_slug
     FROM assets a
@@ -58,18 +51,21 @@ router.get('/', (req, res) => {
   const params = [];
 
   if (keyword) {
+    validate.string(keyword, 'keyword', { maxLength: 100 });
     query += ' AND (a.name LIKE ? OR a.description LIKE ?)';
     params.push(`%${keyword}%`, `%${keyword}%`);
   }
 
   if (type) {
+    validate.enum(type, 'type', ['domain', 'business_name']);
     query += ' AND a.type = ?';
     params.push(type);
   }
 
   if (maxPrice) {
-    query += ' AND a.estimated_cost <= ?';
-    params.push(parseFloat(maxPrice));
+    const maxCents = validate.money(maxPrice, 'maxPrice');
+    query += ' AND a.estimated_cost_cents <= ?';
+    params.push(maxCents);
   }
 
   if (category) {
@@ -79,17 +75,16 @@ router.get('/', (req, res) => {
 
   query += ' ORDER BY a.created_at DESC';
 
-  try {
-    const assets = db.prepare(query).all(...params);
-    res.json(assets);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch assets' });
-  }
-});
+  const assets = db.prepare(query).all(...params);
+  res.json(assets.map(asset => ({
+    ...asset,
+    estimated_cost: asset.estimated_cost_cents ? validate.moneyFromCents(asset.estimated_cost_cents) : null,
+  })));
+}));
 
-router.get('/:id', (req, res) => {
-  const { id } = req.params;
-  
+router.get('/:id', asyncHandler(async (req, res) => {
+  const id = validate.id(req.params.id);
+
   const asset = db.prepare(`
     SELECT a.*, c.name as category_name, c.slug as category_slug
     FROM assets a
@@ -98,10 +93,13 @@ router.get('/:id', (req, res) => {
   `).get(id);
 
   if (!asset) {
-    return res.status(404).json({ error: 'Asset not found' });
+    throw new ValidationError('Asset not found');
   }
 
-  res.json(asset);
-});
+  res.json({
+    ...asset,
+    estimated_cost: asset.estimated_cost_cents ? validate.moneyFromCents(asset.estimated_cost_cents) : null,
+  });
+}));
 
 module.exports = router;

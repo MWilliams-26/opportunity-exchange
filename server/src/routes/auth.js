@@ -2,87 +2,65 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db/schema');
 const { authenticateToken, generateToken } = require('../middleware/auth');
+const { asyncHandler, ValidationError, NotFoundError, ConflictError } = require('../middleware/errorHandler');
+const validate = require('../middleware/validate');
 
 const router = express.Router();
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+router.post('/register', asyncHandler(async (req, res) => {
+  validate.required(req.body.email, 'email');
+  validate.required(req.body.password, 'password');
+  validate.required(req.body.name, 'name');
 
-function isValidEmail(email) {
-  return EMAIL_REGEX.test(email);
-}
+  const email = validate.email(req.body.email);
+  const password = validate.password(req.body.password);
+  const name = validate.string(req.body.name, 'name', { minLength: 1, maxLength: 100 });
 
-router.post('/register', (req, res) => {
-  const { email, password, name } = req.body;
-
-  if (!email || !password || !name) {
-    return res.status(400).json({ error: 'Email, password, and name are required' });
-  }
-
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ error: 'Invalid email format' });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
-  }
-
-  const normalizedEmail = email.toLowerCase().trim();
-
-  const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail);
+  const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (existingUser) {
-    return res.status(409).json({ error: 'Email already registered' });
+    throw new ConflictError('Email already registered');
   }
 
-  const passwordHash = bcrypt.hashSync(password, 10);
-  
-  try {
-    const result = db.prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)').run(normalizedEmail, passwordHash, name);
-    const user = { id: result.lastInsertRowid, email: normalizedEmail, name };
-    const token = generateToken(user);
-    
-    res.status(201).json({ user, token });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to create user' });
-  }
-});
+  const passwordHash = bcrypt.hashSync(password, 12);
 
-router.post('/login', (req, res) => {
-  const { email, password } = req.body;
+  const result = db.prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)').run(email, passwordHash, name);
+  const user = { id: result.lastInsertRowid, email, name };
+  const token = generateToken(user);
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
+  res.status(201).json({ user, token });
+}));
 
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ error: 'Invalid email format' });
-  }
+router.post('/login', asyncHandler(async (req, res) => {
+  validate.required(req.body.email, 'email');
+  validate.required(req.body.password, 'password');
 
-  const normalizedEmail = email.toLowerCase().trim();
+  const email = validate.email(req.body.email);
+  const password = validate.string(req.body.password, 'password', { minLength: 1, maxLength: 128 });
 
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(normalizedEmail);
+  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
   if (!user) {
-    return res.status(401).json({ error: 'Invalid email or password' });
+    throw new ValidationError('Invalid email or password');
   }
 
   const validPassword = bcrypt.compareSync(password, user.password_hash);
   if (!validPassword) {
-    return res.status(401).json({ error: 'Invalid email or password' });
+    throw new ValidationError('Invalid email or password');
   }
 
   const token = generateToken({ id: user.id, email: user.email, name: user.name });
-  
+
   res.json({
     user: { id: user.id, email: user.email, name: user.name },
-    token
+    token,
   });
-});
+}));
 
-router.get('/me', authenticateToken, (req, res) => {
+router.get('/me', authenticateToken, asyncHandler(async (req, res) => {
   const user = db.prepare('SELECT id, email, name, created_at FROM users WHERE id = ?').get(req.user.id);
   if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+    throw new NotFoundError('User');
   }
   res.json(user);
-});
+}));
 
 module.exports = router;

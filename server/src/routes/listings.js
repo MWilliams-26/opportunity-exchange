@@ -1,24 +1,32 @@
 const express = require('express');
 const db = require('../db/schema');
 const { authenticateToken } = require('../middleware/auth');
+const { asyncHandler, ValidationError, NotFoundError, ForbiddenError } = require('../middleware/errorHandler');
+const validate = require('../middleware/validate');
 
 const router = express.Router();
 
 const VALID_LISTING_TYPES = ['buy_now', 'auction', 'both'];
 const VALID_STATUSES = ['active', 'sold', 'expired', 'cancelled'];
 
-function isPositiveInteger(value) {
-  const num = Number(value);
-  return Number.isInteger(num) && num > 0;
+function formatListing(listing) {
+  return {
+    ...listing,
+    buy_now_price: listing.buy_now_price_cents ? validate.moneyFromCents(listing.buy_now_price_cents) : null,
+    starting_bid: listing.starting_bid_cents ? validate.moneyFromCents(listing.starting_bid_cents) : null,
+    current_bid: listing.current_bid_cents ? validate.moneyFromCents(listing.current_bid_cents) : null,
+    estimated_cost: listing.estimated_cost_cents ? validate.moneyFromCents(listing.estimated_cost_cents) : null,
+  };
 }
 
-router.get('/', (req, res) => {
-  const { status = 'active', category, type, minPrice, maxPrice } = req.query;
+router.get('/', asyncHandler(async (req, res) => {
+  const status = req.query.status || 'active';
+  const { category, type, minPrice, maxPrice } = req.query;
 
   if (status && !VALID_STATUSES.includes(status)) {
-    return res.status(400).json({ error: 'Invalid status value' });
+    throw new ValidationError('Invalid status value', 'status');
   }
-  
+
   let query = `
     SELECT l.*, a.name as asset_name, a.type as asset_type, 
            c.name as category_name, c.slug as category_slug,
@@ -37,36 +45,35 @@ router.get('/', (req, res) => {
   }
 
   if (type) {
+    validate.enum(type, 'type', ['domain', 'business_name']);
     query += ' AND a.type = ?';
     params.push(type);
   }
 
   if (minPrice) {
-    query += ' AND (l.buy_now_price >= ? OR l.current_bid >= ? OR l.starting_bid >= ?)';
-    params.push(parseFloat(minPrice), parseFloat(minPrice), parseFloat(minPrice));
+    const minCents = validate.money(minPrice, 'minPrice');
+    query += ' AND (l.buy_now_price_cents >= ? OR l.current_bid_cents >= ? OR l.starting_bid_cents >= ?)';
+    params.push(minCents, minCents, minCents);
   }
 
   if (maxPrice) {
-    query += ' AND (l.buy_now_price <= ? OR l.current_bid <= ? OR l.starting_bid <= ?)';
-    params.push(parseFloat(maxPrice), parseFloat(maxPrice), parseFloat(maxPrice));
+    const maxCents = validate.money(maxPrice, 'maxPrice');
+    query += ' AND (l.buy_now_price_cents <= ? OR l.current_bid_cents <= ? OR l.starting_bid_cents <= ?)';
+    params.push(maxCents, maxCents, maxCents);
   }
 
   query += ' ORDER BY l.created_at DESC';
 
-  try {
-    const listings = db.prepare(query).all(...params);
-    res.json(listings);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch listings' });
-  }
-});
+  const listings = db.prepare(query).all(...params);
+  res.json(listings.map(formatListing));
+}));
 
-router.get('/:id(\\d+)', (req, res) => {
-  const { id } = req.params;
-  
+router.get('/:id(\\d+)', asyncHandler(async (req, res) => {
+  const id = validate.id(req.params.id);
+
   const listing = db.prepare(`
     SELECT l.*, a.name as asset_name, a.type as asset_type, a.description as asset_description,
-           a.estimated_cost, a.potential_value, a.state,
+           a.estimated_cost_cents, a.potential_value, a.state,
            c.name as category_name, c.slug as category_slug,
            u.name as seller_name
     FROM listings l
@@ -77,125 +84,185 @@ router.get('/:id(\\d+)', (req, res) => {
   `).get(id);
 
   if (!listing) {
-    return res.status(404).json({ error: 'Listing not found' });
+    throw new NotFoundError('Listing');
   }
 
-  res.json(listing);
+  res.json(formatListing(listing));
+}));
+
+const createListingWithAsset = db.transaction((userId, userEmail, data) => {
+  const assetResult = db.prepare(`
+    INSERT INTO assets (name, type, category_id, description)
+    VALUES (?, ?, ?, ?)
+  `).run(
+    data.assetName,
+    data.assetType,
+    data.categoryId || null,
+    data.assetDescription || null
+  );
+
+  const result = db.prepare(`
+    INSERT INTO listings (user_id, asset_id, title, description, listing_type, buy_now_price_cents, starting_bid_cents, auction_end_date, contact_email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    userId,
+    assetResult.lastInsertRowid,
+    data.title,
+    data.description || null,
+    data.listingType,
+    data.buyNowPriceCents,
+    data.startingBidCents,
+    data.auctionEndDate,
+    data.contactEmail || userEmail
+  );
+
+  return db.prepare(`
+    SELECT l.*, a.name as asset_name, a.type as asset_type, a.description as asset_description
+    FROM listings l
+    JOIN assets a ON l.asset_id = a.id
+    WHERE l.id = ?
+  `).get(result.lastInsertRowid);
 });
 
-router.post('/', authenticateToken, (req, res) => {
-  const { asset_id, title, description, listing_type, buy_now_price, starting_bid, auction_end_date, contact_email } = req.body;
+router.post('/', authenticateToken, asyncHandler(async (req, res) => {
+  validate.required(req.body.title, 'title');
+  validate.required(req.body.listing_type, 'listing_type');
+  validate.required(req.body.asset_name, 'asset_name');
+  validate.required(req.body.asset_type, 'asset_type');
 
-  if (!asset_id || !title || !listing_type) {
-    return res.status(400).json({ error: 'asset_id, title, and listing_type are required' });
+  const title = validate.string(req.body.title, 'title', { minLength: 1, maxLength: 200 });
+  const listingType = validate.enum(req.body.listing_type, 'listing_type', VALID_LISTING_TYPES);
+  const description = validate.optional(req.body.description, validate.string, 'description', { maxLength: 5000 });
+  const contactEmail = validate.optional(req.body.contact_email, validate.email, 'contact_email');
+
+  const assetName = validate.string(req.body.asset_name, 'asset_name', { minLength: 1, maxLength: 200 });
+  const assetType = validate.enum(req.body.asset_type, 'asset_type', ['domain', 'business_name']);
+  const assetDescription = validate.optional(req.body.asset_description, validate.string, 'asset_description', { maxLength: 5000 });
+
+  let buyNowPriceCents = null;
+  let startingBidCents = null;
+  let auctionEndDate = null;
+
+  if (listingType === 'buy_now' || listingType === 'both') {
+    validate.required(req.body.buy_now_price, 'buy_now_price');
+    buyNowPriceCents = validate.money(req.body.buy_now_price, 'buy_now_price');
+    if (buyNowPriceCents <= 0) {
+      throw new ValidationError('buy_now_price must be positive', 'buy_now_price');
+    }
   }
 
-  if (!isPositiveInteger(asset_id)) {
-    return res.status(400).json({ error: 'asset_id must be a positive integer' });
+  if (listingType === 'auction' || listingType === 'both') {
+    validate.required(req.body.starting_bid, 'starting_bid');
+    startingBidCents = validate.money(req.body.starting_bid, 'starting_bid');
+    if (startingBidCents <= 0) {
+      throw new ValidationError('starting_bid must be positive', 'starting_bid');
+    }
+    if (req.body.auction_end_date) {
+      auctionEndDate = validate.futureDate(req.body.auction_end_date, 'auction_end_date');
+    }
   }
 
-  if (!VALID_LISTING_TYPES.includes(listing_type)) {
-    return res.status(400).json({ error: 'listing_type must be buy_now, auction, or both' });
-  }
+  const listing = createListingWithAsset(req.user.id, req.user.email, {
+    assetName,
+    assetType,
+    assetDescription,
+    categoryId: req.body.category_id ? validate.id(req.body.category_id, 'category_id') : null,
+    title,
+    description,
+    listingType,
+    buyNowPriceCents,
+    startingBidCents,
+    auctionEndDate,
+    contactEmail,
+  });
 
-  if ((listing_type === 'buy_now' || listing_type === 'both') && !buy_now_price) {
-    return res.status(400).json({ error: 'buy_now_price required for buy_now or both listing types' });
-  }
+  res.status(201).json(formatListing(listing));
+}));
 
-  if ((listing_type === 'auction' || listing_type === 'both') && !starting_bid) {
-    return res.status(400).json({ error: 'starting_bid required for auction or both listing types' });
-  }
-
-  const asset = db.prepare('SELECT id FROM assets WHERE id = ?').get(asset_id);
-  if (!asset) {
-    return res.status(404).json({ error: 'Asset not found' });
-  }
-
-  try {
-    const result = db.prepare(`
-      INSERT INTO listings (user_id, asset_id, title, description, listing_type, buy_now_price, starting_bid, auction_end_date, contact_email)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      req.user.id,
-      asset_id,
-      title,
-      description || null,
-      listing_type,
-      buy_now_price || null,
-      starting_bid || null,
-      auction_end_date || null,
-      contact_email || req.user.email
-    );
-
-    const listing = db.prepare('SELECT * FROM listings WHERE id = ?').get(result.lastInsertRowid);
-    res.status(201).json(listing);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to create listing' });
-  }
-});
-
-router.put('/:id(\\d+)', authenticateToken, (req, res) => {
-  const { id } = req.params;
-  const { title, description, buy_now_price, starting_bid, auction_end_date, status, contact_email } = req.body;
-
-  if (status !== undefined && !VALID_STATUSES.includes(status)) {
-    return res.status(400).json({ error: 'Invalid status value' });
-  }
+router.put('/:id(\\d+)', authenticateToken, asyncHandler(async (req, res) => {
+  const id = validate.id(req.params.id);
 
   const listing = db.prepare('SELECT * FROM listings WHERE id = ?').get(id);
   if (!listing) {
-    return res.status(404).json({ error: 'Listing not found' });
+    throw new NotFoundError('Listing');
   }
 
   if (listing.user_id !== req.user.id) {
-    return res.status(403).json({ error: 'Not authorized to update this listing' });
+    throw new ForbiddenError('Not authorized to update this listing');
   }
 
   const updates = [];
   const params = [];
 
-  if (title !== undefined) { updates.push('title = ?'); params.push(title); }
-  if (description !== undefined) { updates.push('description = ?'); params.push(description); }
-  if (buy_now_price !== undefined) { updates.push('buy_now_price = ?'); params.push(buy_now_price); }
-  if (starting_bid !== undefined) { updates.push('starting_bid = ?'); params.push(starting_bid); }
-  if (auction_end_date !== undefined) { updates.push('auction_end_date = ?'); params.push(auction_end_date); }
-  if (status !== undefined) { updates.push('status = ?'); params.push(status); }
-  if (contact_email !== undefined) { updates.push('contact_email = ?'); params.push(contact_email); }
+  if (req.body.title !== undefined) {
+    const title = validate.string(req.body.title, 'title', { minLength: 1, maxLength: 200 });
+    updates.push('title = ?');
+    params.push(title);
+  }
+
+  if (req.body.description !== undefined) {
+    const description = validate.string(req.body.description, 'description', { maxLength: 5000 });
+    updates.push('description = ?');
+    params.push(description);
+  }
+
+  if (req.body.buy_now_price !== undefined) {
+    const cents = validate.money(req.body.buy_now_price, 'buy_now_price');
+    updates.push('buy_now_price_cents = ?');
+    params.push(cents);
+  }
+
+  if (req.body.starting_bid !== undefined) {
+    const cents = validate.money(req.body.starting_bid, 'starting_bid');
+    updates.push('starting_bid_cents = ?');
+    params.push(cents);
+  }
+
+  if (req.body.auction_end_date !== undefined) {
+    const date = req.body.auction_end_date ? validate.futureDate(req.body.auction_end_date, 'auction_end_date') : null;
+    updates.push('auction_end_date = ?');
+    params.push(date);
+  }
+
+  if (req.body.status !== undefined) {
+    const status = validate.enum(req.body.status, 'status', VALID_STATUSES);
+    updates.push('status = ?');
+    params.push(status);
+  }
+
+  if (req.body.contact_email !== undefined) {
+    const email = validate.email(req.body.contact_email, 'contact_email');
+    updates.push('contact_email = ?');
+    params.push(email);
+  }
 
   if (updates.length === 0) {
-    return res.status(400).json({ error: 'No fields to update' });
+    throw new ValidationError('No fields to update');
   }
 
   params.push(id);
+  db.prepare(`UPDATE listings SET ${updates.join(', ')} WHERE id = ?`).run(...params);
 
-  try {
-    db.prepare(`UPDATE listings SET ${updates.join(', ')} WHERE id = ?`).run(...params);
-    const updated = db.prepare('SELECT * FROM listings WHERE id = ?').get(id);
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to update listing' });
-  }
-});
+  const updated = db.prepare('SELECT * FROM listings WHERE id = ?').get(id);
+  res.json(formatListing(updated));
+}));
 
-router.delete('/:id(\\d+)', authenticateToken, (req, res) => {
-  const { id } = req.params;
+router.delete('/:id(\\d+)', authenticateToken, asyncHandler(async (req, res) => {
+  const id = validate.id(req.params.id);
 
   const listing = db.prepare('SELECT * FROM listings WHERE id = ?').get(id);
   if (!listing) {
-    return res.status(404).json({ error: 'Listing not found' });
+    throw new NotFoundError('Listing');
   }
 
   if (listing.user_id !== req.user.id) {
-    return res.status(403).json({ error: 'Not authorized to delete this listing' });
+    throw new ForbiddenError('Not authorized to delete this listing');
   }
 
-  try {
-    db.prepare('DELETE FROM bids WHERE listing_id = ?').run(id);
-    db.prepare('DELETE FROM listings WHERE id = ?').run(id);
-    res.json({ message: 'Listing deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete listing' });
-  }
-});
+  db.prepare('DELETE FROM bids WHERE listing_id = ?').run(id);
+  db.prepare('DELETE FROM listings WHERE id = ?').run(id);
+
+  res.json({ message: 'Listing deleted successfully' });
+}));
 
 module.exports = router;

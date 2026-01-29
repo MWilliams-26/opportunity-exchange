@@ -22,6 +22,9 @@ export function Header() {
               Opportunity Exchange
             </Link>
             <nav className="hidden md:flex items-center gap-6">
+              <Link to="/create" className="text-slate-600 hover:text-slate-900 transition-colors">
+                Create
+              </Link>
               <Link to="/discover" className="text-slate-600 hover:text-slate-900 transition-colors">
                 Discover
               </Link>
@@ -34,11 +37,6 @@ export function Header() {
           <div className="hidden md:flex items-center gap-4">
             {isAuthenticated ? (
               <>
-                <Link to="/create-listing">
-                  <Button variant="primary" size="sm">
-                    Create Listing
-                  </Button>
-                </Link>
                 <Link to="/dashboard" className="text-slate-600 hover:text-slate-900 transition-colors">
                   Dashboard
                 </Link>
@@ -84,6 +82,13 @@ export function Header() {
           <div className="md:hidden py-4 border-t border-slate-200">
             <nav className="flex flex-col gap-2">
               <Link
+                to="/create"
+                className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Create
+              </Link>
+              <Link
                 to="/discover"
                 className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg"
                 onClick={() => setMobileMenuOpen(false)}
@@ -99,13 +104,6 @@ export function Header() {
               </Link>
               {isAuthenticated ? (
                 <>
-                  <Link
-                    to="/create-listing"
-                    className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Create Listing
-                  </Link>
                   <Link
                     to="/dashboard"
                     className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg"

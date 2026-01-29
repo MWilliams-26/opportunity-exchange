@@ -33,7 +33,7 @@ export function useApi<T, Args extends unknown[] = []>(
         let errorMessage = 'An unexpected error occurred';
         if (axios.isAxiosError(err)) {
           const apiError = err.response?.data as ApiError | undefined;
-          errorMessage = apiError?.message || err.message;
+          errorMessage = apiError?.error?.message || err.message;
         } else if (err instanceof Error) {
           errorMessage = err.message;
         }

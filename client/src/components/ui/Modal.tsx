@@ -36,7 +36,7 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
   return (
     <div className="modal" role="dialog" aria-modal="true">
       <div className="overlay" onClick={onClose} />
-      <div className="modal-content relative z-10">
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-6 border-b border-slate-200">
           <h2 className="section-header">{title}</h2>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">

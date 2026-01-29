@@ -1,5 +1,5 @@
-import axios from 'axios';
-import type { Asset, Listing, Bid, AuthResponse, User, DomainSearchResult, SearchResponse } from '../types';
+import axios, { AxiosError } from 'axios';
+import type { Asset, Listing, Bid, AuthResponse, User, DomainSearchResult, SearchResponse, ApiError, BrandableName, WatchlistItem, Category } from '../types';
 
 const api = axios.create({
   baseURL: 'http://localhost:3001/api',
@@ -26,6 +26,39 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export const extractErrorMessage = (error: unknown): string => {
+  if (error instanceof AxiosError && error.response?.data) {
+    const data = error.response.data as ApiError;
+    if (data.error?.message) {
+      return data.error.message;
+    }
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'An unexpected error occurred';
+};
+
+export const extractErrorCode = (error: unknown): string | null => {
+  if (error instanceof AxiosError && error.response?.data) {
+    const data = error.response.data as ApiError;
+    if (data.error?.code) {
+      return data.error.code;
+    }
+  }
+  return null;
+};
+
+export const extractErrorField = (error: unknown): string | null => {
+  if (error instanceof AxiosError && error.response?.data) {
+    const data = error.response.data as ApiError;
+    if (data.error?.field) {
+      return data.error.field;
+    }
+  }
+  return null;
+};
 
 // Auth
 export const login = async (email: string, password: string): Promise<AuthResponse> => {
@@ -73,9 +106,9 @@ export const checkDomain = async (domain: string): Promise<DomainSearchResult> =
 
 // Listings
 export interface ListingFilters {
-  listingType?: string;
+  listing_type?: string;
   status?: string;
-  sellerId?: string;
+  user_id?: string;
 }
 
 export const getListings = async (filters?: ListingFilters): Promise<Listing[]> => {
@@ -89,20 +122,22 @@ export const getListing = async (id: string): Promise<Listing> => {
 };
 
 export const getMyListings = async (): Promise<Listing[]> => {
-  const { data } = await api.get('/listings/my');
+  const { data } = await api.get('/users/me/listings');
   return data;
 };
 
 export interface CreateListingData {
-  assetName: string;
-  assetType: string;
-  assetDescription: string;
+  asset_name: string;
+  asset_type: 'domain' | 'business_name';
+  asset_description?: string;
+  category_id?: number;
   title: string;
   description: string;
-  listingType: 'buy_now' | 'auction';
-  buyNowPrice?: number;
-  startingBid?: number;
-  endDate?: string;
+  listing_type: 'buy_now' | 'auction';
+  buy_now_price?: number;
+  starting_bid?: number;
+  auction_end_date?: string;
+  contact_email?: string;
 }
 
 export const createListing = async (listingData: CreateListingData): Promise<Listing> => {
@@ -128,6 +163,70 @@ export const getBidsForListing = async (listingId: string): Promise<Bid[]> => {
 export const placeBid = async (listingId: string, amount: number): Promise<Bid> => {
   const { data } = await api.post(`/listings/${listingId}/bids`, { amount });
   return data;
+};
+
+// Brandable Names
+export interface BrandableNameFilters {
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sort?: 'newest' | 'price_asc' | 'price_desc';
+}
+
+export const getBrandableNames = async (filters?: BrandableNameFilters): Promise<BrandableName[]> => {
+  const { data } = await api.get('/brandable-names', { params: filters });
+  return data;
+};
+
+export const getMyBrandableNames = async (): Promise<BrandableName[]> => {
+  const { data } = await api.get('/users/me/brandable-names');
+  return data;
+};
+
+export const deleteBrandableName = async (id: number): Promise<void> => {
+  await api.delete(`/brandable-names/${id}`);
+};
+
+// Categories
+export const getCategories = async (): Promise<Category[]> => {
+  const { data } = await api.get('/categories');
+  return data;
+};
+
+// Watchlist
+export const getWatchlist = async (): Promise<WatchlistItem[]> => {
+  const { data } = await api.get('/watchlist');
+  return data;
+};
+
+export interface AddToWatchlistData {
+  domain: string;
+  expiry_date: string;
+  estimated_value?: number;
+  notes?: string;
+}
+
+export const addToWatchlist = async (watchlistData: AddToWatchlistData): Promise<WatchlistItem> => {
+  const { data } = await api.post('/watchlist', watchlistData);
+  return data;
+};
+
+export const removeFromWatchlist = async (id: number): Promise<void> => {
+  await api.delete(`/watchlist/${id}`);
+};
+
+// Brandable Names - Create
+export interface CreateBrandableNameData {
+  name: string;
+  description?: string;
+  category_id?: number;
+  suggested_price: number;
+  domain_available?: boolean;
+}
+
+export const createBrandableName = async (data: CreateBrandableNameData): Promise<BrandableName> => {
+  const { data: result } = await api.post('/brandable-names', data);
+  return result;
 };
 
 export default api;

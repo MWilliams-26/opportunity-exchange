@@ -16,10 +16,10 @@ export function ListingCard({ listing }: ListingCardProps) {
     }).format(amount);
   };
 
-  const isAuction = listing.listingType === 'auction';
+  const isAuction = listing.listing_type === 'auction';
   const displayPrice = isAuction
-    ? listing.currentBid || listing.startingBid
-    : listing.buyNowPrice;
+    ? listing.current_bid || listing.starting_bid
+    : listing.buy_now_price;
 
   return (
     <Link to={`/listings/${listing.id}`}>
@@ -66,17 +66,17 @@ export function ListingCard({ listing }: ListingCardProps) {
         <div className="pt-4 border-t border-slate-100 space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-sm text-slate-500">
-              {isAuction ? (listing.currentBid ? 'Current Bid' : 'Starting Bid') : 'Price'}
+              {isAuction ? (listing.current_bid ? 'Current Bid' : 'Starting Bid') : 'Price'}
             </span>
             <span className="text-xl font-bold text-slate-800">
               {displayPrice ? formatCurrency(displayPrice) : 'N/A'}
             </span>
           </div>
 
-          {isAuction && listing.endDate && listing.status === 'active' && (
+          {isAuction && listing.auction_end_date && listing.status === 'active' && (
             <div className="pt-2 border-t border-slate-100">
               <span className="text-xs text-slate-500 block mb-1">Ends in</span>
-              <Timer endDate={listing.endDate} />
+              <Timer endDate={listing.auction_end_date} />
             </div>
           )}
         </div>

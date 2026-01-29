@@ -1,0 +1,1 @@
+export { MarketplaceCard } from './MarketplaceCard';

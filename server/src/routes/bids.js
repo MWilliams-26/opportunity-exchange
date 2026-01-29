@@ -1,74 +1,86 @@
 const express = require('express');
 const db = require('../db/schema');
 const { authenticateToken } = require('../middleware/auth');
+const { asyncHandler, ValidationError, NotFoundError } = require('../middleware/errorHandler');
+const validate = require('../middleware/validate');
 
 const router = express.Router();
 
-router.post('/:listingId/bids', authenticateToken, (req, res) => {
-  const { listingId } = req.params;
-  const { amount } = req.body;
-
-  if (!amount || amount <= 0) {
-    return res.status(400).json({ error: 'Valid bid amount is required' });
-  }
-
+const placeBid = db.transaction((listingId, userId, amountCents) => {
   const listing = db.prepare('SELECT * FROM listings WHERE id = ?').get(listingId);
+  
   if (!listing) {
-    return res.status(404).json({ error: 'Listing not found' });
+    throw new NotFoundError('Listing');
   }
 
   if (listing.status !== 'active') {
-    return res.status(400).json({ error: 'Listing is not active' });
+    throw new ValidationError('Listing is not active');
   }
 
   if (listing.listing_type === 'buy_now') {
-    return res.status(400).json({ error: 'This listing does not accept bids' });
+    throw new ValidationError('This listing does not accept bids');
   }
 
-  if (listing.user_id === req.user.id) {
-    return res.status(400).json({ error: 'Cannot bid on your own listing' });
-  }
-
-  const minBid = listing.current_bid || listing.starting_bid;
-  if (amount <= minBid) {
-    return res.status(400).json({ error: `Bid must be higher than current bid of $${minBid}` });
+  if (listing.user_id === userId) {
+    throw new ValidationError('Cannot bid on your own listing');
   }
 
   if (listing.auction_end_date && new Date(listing.auction_end_date) < new Date()) {
-    return res.status(400).json({ error: 'Auction has ended' });
+    throw new ValidationError('Auction has ended');
   }
 
-  try {
-    db.prepare('INSERT INTO bids (listing_id, user_id, amount) VALUES (?, ?, ?)').run(listingId, req.user.id, amount);
-    db.prepare('UPDATE listings SET current_bid = ?, highest_bidder_id = ? WHERE id = ?').run(amount, req.user.id, listingId);
+  const currentBidCents = listing.current_bid_cents || 0;
+  const startingBidCents = listing.starting_bid_cents || 0;
+  const minBidCents = Math.max(currentBidCents, startingBidCents);
 
-    const bid = db.prepare('SELECT * FROM bids WHERE listing_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1').get(listingId, req.user.id);
-    res.status(201).json(bid);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to place bid' });
+  if (amountCents <= minBidCents) {
+    const minBidDisplay = validate.moneyFromCents(minBidCents);
+    throw new ValidationError(`Bid must be higher than current bid of $${minBidDisplay.toFixed(2)}`);
   }
+
+  db.prepare('INSERT INTO bids (listing_id, user_id, amount_cents) VALUES (?, ?, ?)').run(listingId, userId, amountCents);
+  db.prepare('UPDATE listings SET current_bid_cents = ?, highest_bidder_id = ? WHERE id = ?').run(amountCents, userId, listingId);
+
+  return db.prepare('SELECT * FROM bids WHERE listing_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1').get(listingId, userId);
 });
 
-router.get('/:listingId/bids', (req, res) => {
-  const { listingId } = req.params;
+router.post('/:listingId/bids', authenticateToken, asyncHandler(async (req, res) => {
+  const listingId = validate.id(req.params.listingId, 'listingId');
+  validate.required(req.body.amount, 'amount');
+  const amountCents = validate.money(req.body.amount, 'amount');
+
+  if (amountCents <= 0) {
+    throw new ValidationError('Bid amount must be positive', 'amount');
+  }
+
+  const bid = placeBid(listingId, req.user.id, amountCents);
+  
+  res.status(201).json({
+    ...bid,
+    amount: validate.moneyFromCents(bid.amount_cents),
+  });
+}));
+
+router.get('/:listingId/bids', asyncHandler(async (req, res) => {
+  const listingId = validate.id(req.params.listingId, 'listingId');
 
   const listing = db.prepare('SELECT id FROM listings WHERE id = ?').get(listingId);
   if (!listing) {
-    return res.status(404).json({ error: 'Listing not found' });
+    throw new NotFoundError('Listing');
   }
 
-  try {
-    const bids = db.prepare(`
-      SELECT b.*, u.name as bidder_name
-      FROM bids b
-      JOIN users u ON b.user_id = u.id
-      WHERE b.listing_id = ?
-      ORDER BY b.amount DESC, b.created_at DESC
-    `).all(listingId);
-    res.json(bids);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch bids' });
-  }
-});
+  const bids = db.prepare(`
+    SELECT b.*, u.name as bidder_name
+    FROM bids b
+    JOIN users u ON b.user_id = u.id
+    WHERE b.listing_id = ?
+    ORDER BY b.amount_cents DESC, b.created_at DESC
+  `).all(listingId);
+
+  res.json(bids.map(bid => ({
+    ...bid,
+    amount: validate.moneyFromCents(bid.amount_cents),
+  })));
+}));
 
 module.exports = router;

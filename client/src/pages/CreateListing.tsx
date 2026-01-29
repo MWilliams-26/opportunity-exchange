@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { ListingForm } from '../components/listings';
 import { createListing, type CreateListingData } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
 export function CreateListing() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const prefillDomain = searchParams.get('domain') || undefined;
 
   const handleSubmit = async (data: CreateListingData) => {
     setLoading(true);
@@ -61,7 +64,7 @@ export function CreateListing() {
           </p>
         </div>
 
-        <ListingForm onSubmit={handleSubmit} loading={loading} error={error} />
+        <ListingForm onSubmit={handleSubmit} loading={loading} error={error} prefillDomain={prefillDomain} />
       </div>
     </div>
   );

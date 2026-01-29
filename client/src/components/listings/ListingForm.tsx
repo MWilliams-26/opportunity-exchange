@@ -6,16 +6,12 @@ interface ListingFormProps {
   onSubmit: (data: CreateListingData) => Promise<void>;
   loading?: boolean;
   error?: string | null;
+  prefillDomain?: string;
 }
 
 const assetTypeOptions = [
-  { value: 'patent', label: 'Patent' },
-  { value: 'trademark', label: 'Trademark' },
-  { value: 'copyright', label: 'Copyright' },
-  { value: 'domain', label: 'Domain' },
-  { value: 'license', label: 'License' },
-  { value: 'contract', label: 'Contract' },
-  { value: 'other', label: 'Other' },
+  { value: 'domain', label: 'Domain Name' },
+  { value: 'business_name', label: 'Business Name' },
 ];
 
 const listingTypeOptions = [
@@ -23,17 +19,18 @@ const listingTypeOptions = [
   { value: 'auction', label: 'Auction' },
 ];
 
-export function ListingForm({ onSubmit, loading, error }: ListingFormProps) {
+export function ListingForm({ onSubmit, loading, error, prefillDomain }: ListingFormProps) {
   const [formData, setFormData] = useState({
-    assetName: '',
-    assetType: 'patent',
-    assetDescription: '',
-    title: '',
+    asset_name: prefillDomain || '',
+    asset_type: 'domain' as 'domain' | 'business_name',
+    asset_description: '',
+    title: prefillDomain ? `Premium Domain: ${prefillDomain}` : '',
     description: '',
-    listingType: 'buy_now' as 'buy_now' | 'auction',
-    buyNowPrice: '',
-    startingBid: '',
-    endDate: '',
+    listing_type: 'buy_now' as 'buy_now' | 'auction',
+    buy_now_price: '',
+    starting_bid: '',
+    auction_end_date: '',
+    contact_email: '',
   });
   const [ownershipConfirmed, setOwnershipConfirmed] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -50,23 +47,23 @@ export function ListingForm({ onSubmit, loading, error }: ListingFormProps) {
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
 
-    if (!formData.assetName.trim()) errors.assetName = 'Asset name is required';
-    if (!formData.assetDescription.trim()) errors.assetDescription = 'Asset description is required';
+    if (!formData.asset_name.trim()) errors.asset_name = 'Asset name is required';
+    if (!formData.asset_description.trim()) errors.asset_description = 'Asset description is required';
     if (!formData.title.trim()) errors.title = 'Listing title is required';
     if (!formData.description.trim()) errors.description = 'Listing description is required';
 
-    if (formData.listingType === 'buy_now') {
-      if (!formData.buyNowPrice || parseFloat(formData.buyNowPrice) <= 0) {
-        errors.buyNowPrice = 'Valid price is required';
+    if (formData.listing_type === 'buy_now') {
+      if (!formData.buy_now_price || parseFloat(formData.buy_now_price) <= 0) {
+        errors.buy_now_price = 'Valid price is required';
       }
     } else {
-      if (!formData.startingBid || parseFloat(formData.startingBid) <= 0) {
-        errors.startingBid = 'Valid starting bid is required';
+      if (!formData.starting_bid || parseFloat(formData.starting_bid) <= 0) {
+        errors.starting_bid = 'Valid starting bid is required';
       }
-      if (!formData.endDate) {
-        errors.endDate = 'Auction end date is required';
-      } else if (new Date(formData.endDate) <= new Date()) {
-        errors.endDate = 'End date must be in the future';
+      if (!formData.auction_end_date) {
+        errors.auction_end_date = 'Auction end date is required';
+      } else if (new Date(formData.auction_end_date) <= new Date()) {
+        errors.auction_end_date = 'End date must be in the future';
       }
     }
 
@@ -83,19 +80,20 @@ export function ListingForm({ onSubmit, loading, error }: ListingFormProps) {
     if (!validate()) return;
 
     const data: CreateListingData = {
-      assetName: formData.assetName,
-      assetType: formData.assetType,
-      assetDescription: formData.assetDescription,
+      asset_name: formData.asset_name,
+      asset_type: formData.asset_type,
+      asset_description: formData.asset_description || undefined,
       title: formData.title,
       description: formData.description,
-      listingType: formData.listingType,
+      listing_type: formData.listing_type,
+      contact_email: formData.contact_email || undefined,
     };
 
-    if (formData.listingType === 'buy_now') {
-      data.buyNowPrice = parseFloat(formData.buyNowPrice);
+    if (formData.listing_type === 'buy_now') {
+      data.buy_now_price = parseFloat(formData.buy_now_price);
     } else {
-      data.startingBid = parseFloat(formData.startingBid);
-      data.endDate = formData.endDate;
+      data.starting_bid = parseFloat(formData.starting_bid);
+      data.auction_end_date = formData.auction_end_date;
     }
 
     await onSubmit(data);
@@ -119,8 +117,8 @@ export function ListingForm({ onSubmit, loading, error }: ListingFormProps) {
         <div className="space-y-4">
           <div>
             <span className="text-sm text-slate-500">Asset</span>
-            <p className="font-semibold text-slate-800">{formData.assetName}</p>
-            <p className="text-sm text-slate-600">{formData.assetType}</p>
+            <p className="font-semibold text-slate-800">{formData.asset_name}</p>
+            <p className="text-sm text-slate-600">{formData.asset_type}</p>
           </div>
           
           <div>
@@ -135,17 +133,17 @@ export function ListingForm({ onSubmit, loading, error }: ListingFormProps) {
           
           <div>
             <span className="text-sm text-slate-500">
-              {formData.listingType === 'buy_now' ? 'Price' : 'Starting Bid'}
+              {formData.listing_type === 'buy_now' ? 'Price' : 'Starting Bid'}
             </span>
             <p className="text-xl font-bold text-slate-800">
-              {formatCurrency(formData.listingType === 'buy_now' ? formData.buyNowPrice : formData.startingBid)}
+              {formatCurrency(formData.listing_type === 'buy_now' ? formData.buy_now_price : formData.starting_bid)}
             </p>
           </div>
           
-          {formData.listingType === 'auction' && formData.endDate && (
+          {formData.listing_type === 'auction' && formData.auction_end_date && (
             <div>
               <span className="text-sm text-slate-500">Auction Ends</span>
-              <p className="text-slate-800">{new Date(formData.endDate).toLocaleString()}</p>
+              <p className="text-slate-800">{new Date(formData.auction_end_date).toLocaleString()}</p>
             </div>
           )}
         </div>
@@ -173,25 +171,25 @@ export function ListingForm({ onSubmit, loading, error }: ListingFormProps) {
         <div className="space-y-4">
           <Input
             label="Asset Name"
-            name="assetName"
-            value={formData.assetName}
+            name="asset_name"
+            value={formData.asset_name}
             onChange={handleChange}
-            error={validationErrors.assetName}
+            error={validationErrors.asset_name}
             placeholder="e.g., Patent #12345678"
           />
           <Select
             label="Asset Type"
-            name="assetType"
-            value={formData.assetType}
+            name="asset_type"
+            value={formData.asset_type}
             onChange={handleChange}
             options={assetTypeOptions}
           />
           <Textarea
             label="Asset Description"
-            name="assetDescription"
-            value={formData.assetDescription}
+            name="asset_description"
+            value={formData.asset_description}
             onChange={handleChange}
-            error={validationErrors.assetDescription}
+            error={validationErrors.asset_description}
             placeholder="Describe the asset, its history, and any relevant details..."
             helpText="Include relevant registration numbers, jurisdictions, or other identifying information"
           />
@@ -219,20 +217,20 @@ export function ListingForm({ onSubmit, loading, error }: ListingFormProps) {
           />
           <Select
             label="Listing Type"
-            name="listingType"
-            value={formData.listingType}
+            name="listing_type"
+            value={formData.listing_type}
             onChange={handleChange}
             options={listingTypeOptions}
           />
 
-          {formData.listingType === 'buy_now' ? (
+          {formData.listing_type === 'buy_now' ? (
             <Input
               label="Buy Now Price"
-              name="buyNowPrice"
+              name="buy_now_price"
               type="number"
-              value={formData.buyNowPrice}
+              value={formData.buy_now_price}
               onChange={handleChange}
-              error={validationErrors.buyNowPrice}
+              error={validationErrors.buy_now_price}
               placeholder="Enter your asking price"
               min="1"
             />
@@ -240,21 +238,21 @@ export function ListingForm({ onSubmit, loading, error }: ListingFormProps) {
             <>
               <Input
                 label="Starting Bid"
-                name="startingBid"
+                name="starting_bid"
                 type="number"
-                value={formData.startingBid}
+                value={formData.starting_bid}
                 onChange={handleChange}
-                error={validationErrors.startingBid}
+                error={validationErrors.starting_bid}
                 placeholder="Enter the minimum starting bid"
                 min="1"
               />
               <Input
                 label="Auction End Date"
-                name="endDate"
+                name="auction_end_date"
                 type="datetime-local"
-                value={formData.endDate}
+                value={formData.auction_end_date}
                 onChange={handleChange}
-                error={validationErrors.endDate}
+                error={validationErrors.auction_end_date}
                 min={new Date().toISOString().slice(0, 16)}
               />
             </>

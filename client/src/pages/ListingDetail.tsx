@@ -101,8 +101,8 @@ export function ListingDetail() {
     );
   }
 
-  const isAuction = listing.listingType === 'auction';
-  const isOwner = user?.id === listing.sellerId;
+  const isAuction = listing.listing_type === 'auction';
+  const isOwner = user?.id === listing.user_id;
   const isActive = listing.status === 'active';
 
   return (
@@ -194,7 +194,7 @@ export function ListingDetail() {
               <div className="text-center mb-6">
                 <span className="text-sm text-slate-500 block mb-1">
                   {isAuction
-                    ? listing.currentBid
+                    ? listing.current_bid
                       ? 'Current Bid'
                       : 'Starting Bid'
                     : 'Price'}
@@ -202,16 +202,16 @@ export function ListingDetail() {
                 <span className="text-3xl font-bold text-slate-800">
                   {formatCurrency(
                     isAuction
-                      ? listing.currentBid || listing.startingBid || 0
-                      : listing.buyNowPrice || 0
+                      ? listing.current_bid || listing.starting_bid || 0
+                      : listing.buy_now_price || 0
                   )}
                 </span>
               </div>
 
-              {isAuction && listing.endDate && isActive && (
+              {isAuction && listing.auction_end_date && isActive && (
                 <div className="mb-6 p-4 bg-slate-50 rounded-lg">
                   <span className="text-sm text-slate-500 block mb-2">Auction ends in</span>
-                  <Timer endDate={listing.endDate} onExpire={fetchData} />
+                  <Timer endDate={listing.auction_end_date} onExpire={fetchData} />
                 </div>
               )}
 
@@ -220,8 +220,8 @@ export function ListingDetail() {
                   {isAuction ? (
                     isAuthenticated ? (
                       <BidForm
-                        currentBid={listing.currentBid || listing.startingBid || 0}
-                        minimumBid={listing.startingBid || 1}
+                        currentBid={listing.current_bid || listing.starting_bid || 0}
+                        minimumBid={listing.starting_bid || 1}
                         onSubmit={handlePlaceBid}
                         loading={bidding}
                         error={bidError}
@@ -273,7 +273,7 @@ export function ListingDetail() {
                 <div className="flex justify-between">
                   <span className="text-slate-500">Member since</span>
                   <span className="text-slate-600">
-                    {listing.seller?.createdAt ? formatDate(listing.seller.createdAt) : 'N/A'}
+                    {listing.seller?.created_at ? formatDate(listing.seller.created_at) : 'N/A'}
                   </span>
                 </div>
               </div>
@@ -282,7 +282,7 @@ export function ListingDetail() {
             <Card>
               <div className="text-xs text-slate-500">
                 <p className="mb-2">
-                  <strong>Listed:</strong> {formatDate(listing.createdAt)}
+                  <strong>Listed:</strong> {formatDate(listing.created_at)}
                 </p>
                 <p>
                   Opportunity Exchange is not responsible for the accuracy of listing 
@@ -313,7 +313,7 @@ export function ListingDetail() {
           <p className="text-slate-600">
             By expressing interest, you confirm that you are seriously considering 
             purchasing this asset at the listed price of{' '}
-            <strong>{formatCurrency(listing.buyNowPrice || 0)}</strong>.
+            <strong>{formatCurrency(listing.buy_now_price || 0)}</strong>.
           </p>
           <p className="text-slate-600">
             The seller will be notified and may contact you to proceed with the transaction.

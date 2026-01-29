@@ -7,19 +7,21 @@ A marketplace for discovering and trading digital assets — domains and busines
 ```bash
 cd opportunity-exchange
 
-# Install dependencies
-npm install
-
-# Initialize database (categories only, no mock data)
-npm run seed
+# Install all dependencies
+npm run install:all
 
 # Create .env file from example
 cp server/.env.example server/.env
-# Edit server/.env and set JWT_SECRET
+# Edit server/.env and set JWT_SECRET (min 32 characters)
+
+# Initialize database
+npm run seed
 
 # Start both server + client
 npm run dev
 ```
+
+**Note**: Requires Node.js >= 22.12.0 (use `nvm install 22` if needed)
 
 - **API**: http://localhost:3001
 - **Client**: http://localhost:5173
@@ -132,12 +134,16 @@ NODE_ENV=development
 ## Security Features
 
 - JWT authentication with algorithm/issuer/audience validation
-- bcrypt password hashing
+- bcrypt password hashing (cost factor 12)
 - Parameterized SQL queries (no SQL injection)
-- Input validation (emails, IDs, enums)
+- Centralized input validation (emails, IDs, enums, money, domains)
 - Helmet security headers
 - CORS allowlist
-- Request body size limits
+- Request body size limits (100kb)
+- Rate limiting (auth: 10/15min, search: 30/15min, general: 100/15min)
+- Transactional bidding (prevents race conditions)
+- Graceful shutdown handling
+- Structured logging with Pino
 
 ---
 
