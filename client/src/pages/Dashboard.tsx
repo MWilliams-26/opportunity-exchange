@@ -9,6 +9,9 @@ import {
   deleteBrandableName,
   getWatchlist,
   removeFromWatchlist,
+  getMyTransactions,
+  type Transaction,
+  type TransactionsResponse,
 } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import type { Listing, Bid, BrandableName, WatchlistItem } from '../types';
@@ -20,6 +23,8 @@ export function Dashboard() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [brandableNames, setBrandableNames] = useState<BrandableName[]>([]);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionsSummary, setTransactionsSummary] = useState<TransactionsResponse['summary'] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,14 +44,17 @@ export function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [listingsData, namesData, watchlistData] = await Promise.all([
+      const [listingsData, namesData, watchlistData, transactionsData] = await Promise.all([
         getMyListings().catch(() => []),
         getMyBrandableNames().catch(() => []),
         getWatchlist().catch(() => []),
+        getMyTransactions().catch(() => ({ transactions: [], summary: { total_earnings: 0, total_spent: 0, pending_payouts: 0 } })),
       ]);
       setListings(listingsData);
       setBrandableNames(namesData);
       setWatchlist(watchlistData);
+      setTransactions(transactionsData.transactions);
+      setTransactionsSummary(transactionsData.summary);
     } catch (err) {
       setError('Failed to load dashboard data.');
       console.error(err);
@@ -190,11 +198,15 @@ export function Dashboard() {
           <h2 className="section-header mb-6">Earnings Summary</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div className="text-center">
-              <p className="text-3xl font-bold text-emerald-600">$0</p>
+              <p className="text-3xl font-bold text-emerald-600">
+                {formatCurrency(transactionsSummary?.total_earnings || 0)}
+              </p>
               <p className="text-sm text-slate-500">Total Earnings</p>
             </div>
             <div className="text-center">
-              <p className="text-3xl font-bold text-yellow-600">$0</p>
+              <p className="text-3xl font-bold text-yellow-600">
+                {formatCurrency(transactionsSummary?.pending_payouts || 0)}
+              </p>
               <p className="text-sm text-slate-500">Pending Payouts</p>
             </div>
             <div className="text-center">
@@ -496,9 +508,73 @@ export function Dashboard() {
         </Card>
 
         {/* Recent Activity Section */}
-        <Card>
-          <h2 className="section-header mb-4">Recent Activity</h2>
-          <p className="text-slate-500 text-center py-8">No transactions yet.</p>
+        <Card padding="none">
+          <div className="p-6 border-b border-slate-200">
+            <h2 className="section-header">Recent Activity</h2>
+          </div>
+          {loading ? (
+            <div className="p-6 space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="skeleton h-12 w-full" />
+              ))}
+            </div>
+          ) : transactions.length === 0 ? (
+            <div className="p-12 text-center">
+              <p className="text-slate-500">No transactions yet.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 text-left text-sm text-slate-500">
+                  <tr>
+                    <th className="px-6 py-3 font-medium">Item</th>
+                    <th className="px-6 py-3 font-medium">Type</th>
+                    <th className="px-6 py-3 font-medium">Amount</th>
+                    <th className="px-6 py-3 font-medium">Status</th>
+                    <th className="px-6 py-3 font-medium">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {transactions.slice(0, 10).map((tx) => {
+                    const isSeller = tx.seller_id === Number(user?.id);
+                    return (
+                      <tr key={tx.id} className="hover:bg-slate-50">
+                        <td className="px-6 py-4 font-medium text-slate-800">
+                          {tx.item_name || `Transaction #${tx.id}`}
+                        </td>
+                        <td className="px-6 py-4">
+                          <Badge variant={isSeller ? 'success' : 'info'}>
+                            {isSeller ? 'Sale' : 'Purchase'}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 font-medium">
+                          <span className={isSeller ? 'text-emerald-600' : 'text-slate-800'}>
+                            {isSeller ? '+' : '-'}{formatCurrency(isSeller ? tx.seller_payout : tx.sale_price)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <Badge
+                            variant={
+                              tx.status === 'completed'
+                                ? 'success'
+                                : tx.status === 'pending'
+                                ? 'warning'
+                                : 'neutral'
+                            }
+                          >
+                            {tx.status}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 text-slate-500">
+                          {formatDate(tx.created_at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       </div>
 

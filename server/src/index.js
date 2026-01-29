@@ -13,6 +13,7 @@ const bidsRoutes = require('./routes/bids');
 const categoriesRoutes = require('./routes/categories');
 const brandableNamesRoutes = require('./routes/brandableNames');
 const watchlistRoutes = require('./routes/watchlist');
+const paymentsRoutes = require('./routes/payments');
 const { authenticateToken } = require('./middleware/auth');
 const { generalLimiter, authLimiter, searchLimiter } = require('./middleware/rateLimiter');
 const { asyncHandler, notFoundHandler, errorHandler } = require('./middleware/errorHandler');
@@ -28,6 +29,8 @@ const app = express();
 app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/api/health' } }));
 
 app.use(helmet());
+
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 
 app.use(cors({
   origin: config.cors.origins,
@@ -47,6 +50,7 @@ app.use('/api/listings', bidsRoutes);
 app.use('/api/categories', categoriesRoutes);
 app.use('/api/brandable-names', brandableNamesRoutes);
 app.use('/api/watchlist', watchlistRoutes);
+app.use('/api/payments', paymentsRoutes);
 
 app.get('/api/users/me/listings', authenticateToken, asyncHandler(async (req, res) => {
   const listings = db.prepare(`

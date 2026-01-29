@@ -18,7 +18,7 @@ export function MarketplaceCard({ item }: MarketplaceCardProps) {
 
   const isBrandableName = item.type === 'brandable_name';
   const linkTo = isBrandableName
-    ? `/brandable-names/${item.id}`
+    ? `/names/${item.id}`
     : `/listings/${item.id}`;
 
   return (

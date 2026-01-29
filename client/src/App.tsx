@@ -7,6 +7,7 @@ import {
   Discover,
   Marketplace,
   ListingDetail,
+  BrandableNameDetail,
   Dashboard,
   Login,
   Register,
@@ -23,6 +24,7 @@ function App() {
             <Route path="/discover" element={<Discover />} />
             <Route path="/marketplace" element={<Marketplace />} />
             <Route path="/listings/:id" element={<ListingDetail />} />
+            <Route path="/names/:id" element={<BrandableNameDetail />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />

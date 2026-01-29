@@ -229,4 +229,43 @@ export const createBrandableName = async (data: CreateBrandableNameData): Promis
   return result;
 };
 
+export const getBrandableName = async (id: string): Promise<BrandableName> => {
+  const { data } = await api.get(`/brandable-names/${id}`);
+  return data;
+};
+
+// Payments
+export const createCheckoutSession = async (brandableNameId: number): Promise<{ sessionId: string; url: string }> => {
+  const { data } = await api.post('/payments/create-checkout-session', { brandable_name_id: brandableNameId });
+  return data;
+};
+
+export interface Transaction {
+  id: number;
+  brandable_name_id: number | null;
+  listing_id: number | null;
+  seller_id: number;
+  buyer_id: number;
+  sale_price: number;
+  platform_fee: number;
+  seller_payout: number;
+  status: string;
+  created_at: string;
+  item_name?: string;
+}
+
+export interface TransactionsResponse {
+  transactions: Transaction[];
+  summary: {
+    total_earnings: number;
+    total_spent: number;
+    pending_payouts: number;
+  };
+}
+
+export const getMyTransactions = async (): Promise<TransactionsResponse> => {
+  const { data } = await api.get('/payments/transactions');
+  return data;
+};
+
 export default api;
