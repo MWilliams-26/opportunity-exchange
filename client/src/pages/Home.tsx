@@ -1,22 +1,29 @@
 import { Link } from 'react-router-dom';
 import { Button, Card } from '../components/ui';
 
-const valueProps = [
+const features = [
   {
-    title: 'Create & Earn',
-    description: 'Submit brandable names you create. Earn money when they sell.',
-    icon: '✨',
-  },
-  {
-    title: 'Find & Flip',
-    description: 'Discover expiring domains with value. Register and resell for profit.',
+    title: 'Track Expiring Domains',
+    description: 'Monitor domains nearing expiration. Get alerts before they drop.',
     icon: '🔍',
   },
   {
-    title: 'Zero Upfront Cost',
-    description: 'No inventory to buy. Just your creativity and eye for opportunity.',
-    icon: '💡',
+    title: 'Register at Drop',
+    description: 'Catch valuable domains when they become available. No bidding wars.',
+    icon: '⚡',
   },
+  {
+    title: 'Flip for Profit',
+    description: 'Acquire undervalued domains and resell them for a profit.',
+    icon: '💰',
+  },
+];
+
+const assetTypes = [
+  { name: 'Domains', description: 'Expiring .com, .net, .org, .io', available: true },
+  { name: 'Social Handles', description: 'Twitter, Instagram, TikTok', available: false },
+  { name: 'Trademarks', description: 'Abandoned & lapsed marks', available: false },
+  { name: 'Real Estate', description: 'Tax liens & auctions', available: false },
 ];
 
 export function Home() {
@@ -26,46 +33,76 @@ export function Home() {
       <section className="bg-gradient-to-br from-slate-800 to-slate-900 text-white py-20 sm:py-28">
         <div className="container-wide text-center">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 tracking-tight">
-            Turn Creativity
+            Catch Expiring Domains
             <br />
-            <span className="text-emerald-400">Into Income</span>
+            <span className="text-emerald-400">Before Anyone Else</span>
           </h1>
           <p className="text-lg sm:text-xl text-slate-300 max-w-2xl mx-auto mb-10">
-            Create brandable names, discover expiring domains, and build passive income
-            with zero upfront investment. Your creativity is your inventory.
+            Track domains nearing expiration, get alerts when they drop, and register
+            valuable names at standard prices. No auctions. No bidding wars.
           </p>
 
           <div className="flex flex-wrap justify-center gap-4">
-            <Link to="/create">
+            <Link to="/discover">
               <Button variant="primary" size="lg">
-                Start Creating
+                Search Domains
               </Button>
             </Link>
-            <Link to="/discover">
+            <Link to="/register">
               <Button variant="outline" size="lg" className="border-white/30 text-white hover:bg-white/10">
-                Find Domains
+                Create Account
               </Button>
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Value Props Section */}
+      {/* How It Works */}
       <section className="section">
         <div className="container-wide">
           <h2 className="page-title text-center mb-4">How It Works</h2>
           <p className="text-muted text-center mb-12 max-w-xl mx-auto">
-            Three ways to turn your creativity and research into real income.
+            Find, track, and acquire expiring domains in three simple steps.
           </p>
 
           <div className="grid gap-8 md:grid-cols-3">
-            {valueProps.map((prop) => (
-              <Card key={prop.title} className="text-center">
+            {features.map((feature) => (
+              <Card key={feature.title} className="text-center">
                 <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 text-2xl mb-4">
-                  {prop.icon}
+                  {feature.icon}
                 </span>
-                <h3 className="section-header mb-2">{prop.title}</h3>
-                <p className="text-slate-600">{prop.description}</p>
+                <h3 className="section-header mb-2">{feature.title}</h3>
+                <p className="text-slate-600">{feature.description}</p>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Asset Types */}
+      <section className="section bg-slate-50">
+        <div className="container-wide">
+          <h2 className="page-title text-center mb-4">Discover Undervalued Assets</h2>
+          <p className="text-muted text-center mb-12 max-w-xl mx-auto">
+            We're building the best platform for finding affordable digital (and physical) assets.
+          </p>
+
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {assetTypes.map((asset) => (
+              <Card key={asset.name} className={!asset.available ? 'opacity-60' : ''}>
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="font-semibold text-slate-800">{asset.name}</h3>
+                  {asset.available ? (
+                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                      Live
+                    </span>
+                  ) : (
+                    <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
+                      Coming Soon
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-slate-600">{asset.description}</p>
               </Card>
             ))}
           </div>
@@ -75,18 +112,18 @@ export function Home() {
       {/* CTA Section */}
       <section className="section bg-emerald-600 text-white">
         <div className="container-narrow text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to Get Started?</h2>
+          <h2 className="text-3xl font-bold mb-4">Start Finding Opportunities</h2>
           <p className="text-emerald-100 mb-8 max-w-md mx-auto">
-            Join creators and domain flippers earning passive income on Opportunity Exchange.
+            Join smart investors who catch expiring domains and build valuable portfolios.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <Link to="/create">
+            <Link to="/discover">
               <Button
                 variant="outline"
                 size="lg"
                 className="border-white text-white hover:bg-white/10"
               >
-                Create Names
+                Search Domains
               </Button>
             </Link>
             <Link to="/register">
@@ -95,7 +132,7 @@ export function Home() {
                 size="lg"
                 className="bg-white text-emerald-600 hover:bg-slate-100"
               >
-                Create Account
+                Create Free Account
               </Button>
             </Link>
           </div>

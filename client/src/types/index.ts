@@ -5,49 +5,6 @@ export interface User {
   created_at: string;
 }
 
-export interface Asset {
-  id: number;
-  name: string;
-  type: 'domain' | 'business_name';
-  category_id: number;
-  category_name?: string;
-  category_slug?: string;
-  description: string;
-  estimated_cost: number;
-  potential_value: string;
-  state?: string;
-  created_at: string;
-}
-
-export interface Listing {
-  id: string;
-  asset_id: string;
-  asset?: Asset;
-  user_id: string;
-  seller?: User;
-  title: string;
-  description: string;
-  listing_type: 'buy_now' | 'auction';
-  buy_now_price?: number;
-  starting_bid?: number;
-  current_bid?: number;
-  highest_bidder_id?: string;
-  auction_end_date?: string;
-  contact_email?: string;
-  status: 'active' | 'sold' | 'expired' | 'cancelled';
-  created_at: string;
-}
-
-export interface Bid {
-  id: string;
-  listing_id: string;
-  user_id: string;
-  bidder?: User;
-  bidder_name?: string;
-  amount: number;
-  created_at: string;
-}
-
 export interface AuthResponse {
   token: string;
   user: User;
@@ -61,10 +18,6 @@ export interface ApiError {
   };
 }
 
-export type AssetType = Asset['type'];
-export type ListingType = Listing['listing_type'];
-export type ListingStatus = Listing['status'];
-
 export interface DomainSearchResult {
   name: string;
   type: string;
@@ -77,57 +30,12 @@ export interface DomainSearchResult {
 
 export interface SearchResponse {
   domains: DomainSearchResult[];
-  businessName?: {
-    name: string;
-    state: string | null;
-    available: boolean | null;
-    note: string;
-    suggestedAction: string;
-  };
   meta?: {
     keyword: string;
     source: string;
     accuracy: string;
     supportedTlds: string[];
   };
-}
-
-export interface BrandableName {
-  id: number;
-  creator_id: number;
-  name: string;
-  description: string | null;
-  category_id: number | null;
-  category_name: string | null;
-  category_slug: string | null;
-  suggested_price: number | null;
-  domain_available: boolean;
-  status: 'available' | 'sold' | 'reserved';
-  creator_name: string;
-  created_at: string;
-}
-
-export interface Category {
-  id: number;
-  name: string;
-  slug: string;
-  asset_count?: number;
-}
-
-export type MarketplaceItemType = 'brandable_name' | 'premium_domain';
-
-export interface MarketplaceItem {
-  id: string;
-  type: MarketplaceItemType;
-  name: string;
-  price: number | null;
-  category: string | null;
-  seller: string;
-  created_at: string;
-  domain_available?: boolean;
-  listing_type?: 'buy_now' | 'auction';
-  description?: string | null;
-  original: BrandableName | Listing;
 }
 
 export interface WatchlistItem {
@@ -137,6 +45,45 @@ export interface WatchlistItem {
   expiry_date: string;
   estimated_value: number | null;
   notes: string | null;
-  days_until_expiry: number;
+  expiring_domain_id: number | null;
   created_at: string;
+}
+
+export interface ExpiringDomain {
+  id: number;
+  domain: string;
+  tld: string;
+  expiry_date: string | null;
+  delete_date: string | null;
+  status: 'pending' | 'available' | 'registered' | 'archived';
+  backlinks: number;
+  referring_domains: number;
+  domain_age_years: number | null;
+  archive_org_age: number | null;
+  majestic_tf: number;
+  majestic_cf: number;
+  moz_da: number;
+  moz_pa: number;
+  estimated_value_cents: number | null;
+  score: number;
+  why_interesting: string | null;
+  notes: string | null;
+  is_favorite: number;
+  dns_available: number | null;
+  dns_checked_at: string | null;
+  source: string;
+  imported_at: string;
+  updated_at: string;
+}
+
+export interface ExpiringDomainsStats {
+  total: number;
+  favorites: number;
+  pending: number;
+  registered: number;
+  avg_score: number | null;
+  max_score: number | null;
+  high_backlinks: number;
+  high_tf: number;
+  byTld: Array<{ tld: string; count: number }>;
 }

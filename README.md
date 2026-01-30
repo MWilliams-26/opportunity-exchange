@@ -1,94 +1,112 @@
 # Opportunity Exchange
 
-A marketplace for discovering and trading digital assets — domains and business names.
+> Discover expiring domains and undervalued digital assets before anyone else.
+
+A personal tool for finding and tracking expiring domains with real value — backlinks, trust flow, domain age — so you can catch them when they drop.
+
+---
+
+## Features
+
+### 🔍 Import & Search
+- Import domains from ExpiredDomains.net CSV exports
+- Filter by TLD, score, backlinks, trust flow
+- Sort by what matters to you
+
+### ⭐ Score & Explain
+- Automatic scoring based on SEO metrics
+- "Why Interesting" explanations for each domain
+- Identify the best opportunities at a glance
+
+### 📋 Track & Favorite
+- Mark favorites for quick access
+- Add personal notes to any domain
+- Watchlist for domains you're monitoring
+
+### 🔗 Register
+- One-click links to registrars (GoDaddy, Namecheap, Porkbun, DropCatch)
+- Research links (Wayback Machine, SEMrush, Ahrefs)
+
+---
 
 ## Quick Start
 
 ```bash
-cd opportunity-exchange
-
 # Install all dependencies
 npm run install:all
 
-# Create .env file from example
+# Create environment file
 cp server/.env.example server/.env
-# Edit server/.env and set JWT_SECRET (min 32 characters)
+# Edit server/.env and set JWT_SECRET
 
-# Initialize database
-npm run seed
-
-# Start both server + client
+# Start development server
 npm run dev
 ```
 
-**Note**: Requires Node.js >= 22.12.0 (use `nvm install 22` if needed)
+**Requires**: Node.js >= 20.12.0 (22+ recommended)
 
 - **API**: http://localhost:3001
 - **Client**: http://localhost:5173
 
 ---
 
-## Features
+## Importing Domains
 
-### Domain Discovery (Real Data)
-- Search for available domains by keyword
-- Real-time availability checking via DNS lookup
-- Supports: .com, .net, .org, .io, .co, .app, .dev
-- Estimated registration costs ($12-$40)
+### 1. Get Data from ExpiredDomains.net
+1. Create free account at [expireddomains.net](https://www.expireddomains.net)
+2. Go to **Deleted Domains** → **.com**
+3. Apply filters (backlinks > 10, etc.)
+4. Export → CSV
+5. Save to `server/data/`
 
-### Marketplace
-- List domains you own for sale
-- Buy Now or Auction listings
-- Bidding system with countdown timers
-- User dashboard to manage listings
+### 2. Run Import
+```bash
+cd server
+npm run import data/your-file.csv
 
----
+# Preview first (dry run)
+npm run import data/your-file.csv -- --dry-run
 
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS 4 |
-| Backend | Node.js, Express |
-| Database | SQLite (better-sqlite3) |
-| Auth | JWT with bcrypt |
+# Replace existing domains
+npm run import data/your-file.csv -- --replace
+```
 
 ---
 
-## Project Structure
+## Architecture
 
 ```
-opportunity-exchange/
-├── client/                 # React frontend
-│   ├── src/
-│   │   ├── components/     # UI components
-│   │   ├── pages/          # Route pages
-│   │   ├── context/        # Auth context
-│   │   ├── lib/            # API client
-│   │   └── types/          # TypeScript types
-│   └── package.json
-│
-├── server/                 # Express backend
-│   ├── src/
-│   │   ├── db/             # Schema + seed
-│   │   ├── middleware/     # Auth middleware
-│   │   ├── routes/         # API routes
-│   │   └── services/       # Domain checking service
-│   ├── .env.example        # Environment template
-│   └── package.json
-│
-└── package.json            # Root scripts
+server/src/
+├── services/
+│   ├── discovery/      # CSV import, normalization
+│   ├── availability/   # DNS checking, caching
+│   ├── enrichment/     # WHOIS API (optional)
+│   ├── scoring/        # Score calculation, explanations
+│   └── notifications/  # Email alerts (future)
+├── routes/             # API endpoints
+├── middleware/         # Auth, validation, errors
+└── db/                 # SQLite schema
+
+client/src/
+├── pages/              # React pages
+├── components/         # UI components
+├── lib/                # API client
+└── types/              # TypeScript types
 ```
 
 ---
 
 ## API Endpoints
 
-### Domain Discovery
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/assets/search?keyword=X` | Search available domains |
-| `GET /api/assets/check?domain=X` | Check single domain |
+### Expiring Domains
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/expiring-domains` | No | Search domains |
+| `GET /api/expiring-domains/:id` | No | Get domain + availability |
+| `POST /api/expiring-domains/:id/favorite` | Yes | Toggle favorite |
+| `PUT /api/expiring-domains/:id/notes` | Yes | Update notes |
+| `PUT /api/expiring-domains/:id/status` | Yes | Update status |
+| `POST /api/expiring-domains/import` | Yes | Import CSV |
 
 ### Auth
 | Endpoint | Description |
@@ -97,67 +115,38 @@ opportunity-exchange/
 | `POST /api/auth/login` | Login |
 | `GET /api/auth/me` | Current user |
 
-### Listings
+### Watchlist
 | Endpoint | Auth | Description |
 |----------|------|-------------|
-| `GET /api/listings` | No | Browse listings |
-| `GET /api/listings/:id` | No | Listing details |
-| `POST /api/listings` | Yes | Create listing |
-| `PUT /api/listings/:id` | Yes | Update listing |
-| `DELETE /api/listings/:id` | Yes | Delete listing |
-
-### Bids
-| Endpoint | Auth | Description |
-|----------|------|-------------|
-| `GET /api/listings/:id/bids` | No | Get bids |
-| `POST /api/listings/:id/bids` | Yes | Place bid |
+| `GET /api/watchlist` | Yes | Get watchlist |
+| `POST /api/watchlist` | Yes | Add domain |
+| `DELETE /api/watchlist/:id` | Yes | Remove domain |
 
 ---
 
 ## Environment Variables
 
-Create `server/.env`:
-
 ```env
+# Required
 JWT_SECRET=your-secret-key-min-32-chars
-JWT_ISSUER=opportunity-exchange
-JWT_AUDIENCE=opportunity-exchange-api
-CORS_ORIGINS=http://localhost:5173
-PORT=3001
-NODE_ENV=development
+
+# Optional - WHOIS enrichment
+WHOISXML_API_KEY=your-api-key
+
+# Optional - Email alerts (future)
+EMAIL_PROVIDER=resend
+EMAIL_API_KEY=your-api-key
 ```
 
-**Required in production**: `JWT_SECRET`, `NODE_ENV=production`
-
 ---
 
-## Security Features
+## Roadmap
 
-- JWT authentication with algorithm/issuer/audience validation
-- bcrypt password hashing (cost factor 12)
-- Parameterized SQL queries (no SQL injection)
-- Centralized input validation (emails, IDs, enums, money, domains)
-- Helmet security headers
-- CORS allowlist
-- Request body size limits (100kb)
-- Rate limiting (auth: 10/15min, search: 30/15min, general: 100/15min)
-- Transactional bidding (prevents race conditions)
-- Graceful shutdown handling
-- Structured logging with Pino
-
----
-
-## Domain Availability
-
-The MVP uses DNS lookups to check domain availability:
-- **Free**: No API keys required
-- **Fast**: Parallel DNS queries
-- **Limitation**: ~90% accurate (some parked domains may show as taken)
-
-For production, integrate with:
-- GoDaddy Auctions API
-- Namecheap API
-- Dynadot API
+See [ROADMAP.md](ROADMAP.md) for the full feature roadmap:
+- ✅ Phase 1: Expiring domains
+- 🔜 Phase 2: Social media handles
+- 🔜 Phase 3: Trademarks & patents
+- 🔜 Phase 4: Physical assets (tax liens, auctions)
 
 ---
 

@@ -22,31 +22,25 @@ export function Header() {
               Opportunity Exchange
             </Link>
             <nav className="hidden md:flex items-center gap-6">
-              <Link to="/create" className="text-slate-600 hover:text-slate-900 transition-colors">
-                Create
-              </Link>
               <Link to="/discover" className="text-slate-600 hover:text-slate-900 transition-colors">
                 Discover
               </Link>
-              <Link to="/marketplace" className="text-slate-600 hover:text-slate-900 transition-colors">
-                Marketplace
-              </Link>
+              {isAuthenticated && (
+                <Link to="/dashboard" className="text-slate-600 hover:text-slate-900 transition-colors">
+                  Dashboard
+                </Link>
+              )}
             </nav>
           </div>
 
           <div className="hidden md:flex items-center gap-4">
             {isAuthenticated ? (
-              <>
-                <Link to="/dashboard" className="text-slate-600 hover:text-slate-900 transition-colors">
-                  Dashboard
-                </Link>
-                <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
-                  <span className="text-sm text-slate-600">{user?.name}</span>
-                  <Button variant="ghost" size="sm" onClick={handleLogout}>
-                    Logout
-                  </Button>
-                </div>
-              </>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-slate-600">{user?.name}</span>
+                <Button variant="ghost" size="sm" onClick={handleLogout}>
+                  Logout
+                </Button>
+              </div>
             ) : (
               <>
                 <Link to="/login">
@@ -82,25 +76,11 @@ export function Header() {
           <div className="md:hidden py-4 border-t border-slate-200">
             <nav className="flex flex-col gap-2">
               <Link
-                to="/create"
-                className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Create
-              </Link>
-              <Link
                 to="/discover"
                 className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Discover
-              </Link>
-              <Link
-                to="/marketplace"
-                className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Marketplace
               </Link>
               {isAuthenticated ? (
                 <>

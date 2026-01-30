@@ -1,214 +1,198 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { Input, Button, Card, Badge, Select, Modal } from '../components/ui';
-import { Timer } from '../components/ui/Timer';
 import { useAuth } from '../context/AuthContext';
-
-interface ExpiringDomain {
-  name: string;
-  tld: string;
-  expiryDate: string;
-  estimatedValue: number;
-  length: number;
-}
-
-interface WatchlistItem {
-  id: string;
-  domain: string;
-  expiryDate: string;
-  addedAt: string;
-}
+import {
+  getExpiringDomains,
+  toggleExpiringDomainFavorite,
+  updateExpiringDomainNotes,
+} from '../lib/api';
+import type { ExpiringDomain, ExpiringDomainsStats } from '../types';
 
 const TLD_OPTIONS = [
   { value: '', label: 'All TLDs' },
-  { value: '.com', label: '.com' },
-  { value: '.net', label: '.net' },
-  { value: '.org', label: '.org' },
-  { value: '.io', label: '.io' },
+  { value: 'com', label: '.com' },
+  { value: 'net', label: '.net' },
+  { value: 'org', label: '.org' },
+  { value: 'io', label: '.io' },
+  { value: 'co', label: '.co' },
 ];
 
-const MAX_LENGTH_OPTIONS = [
-  { value: '', label: 'Any Length' },
-  { value: '4', label: '4 characters or less' },
-  { value: '6', label: '6 characters or less' },
-  { value: '8', label: '8 characters or less' },
-  { value: '10', label: '10 characters or less' },
+const SORT_OPTIONS = [
+  { value: 'score', label: 'Best Score' },
+  { value: 'backlinks', label: 'Most Backlinks' },
+  { value: 'majestic_tf', label: 'Highest Trust Flow' },
+  { value: 'delete_date', label: 'Soonest Expiry' },
+  { value: 'domain', label: 'Alphabetical' },
 ];
 
-const PREFIXES = ['my', 'go', 'get', 'the', 'pro', 'best', 'top', 'e', 'i', 'x'];
-const SUFFIXES = ['hub', 'lab', 'ly', 'ify', 'io', 'app', 'hq', 'zone', 'spot', 'box'];
-
-function generateMockDomains(keyword: string, tld: string, maxLength: number): ExpiringDomain[] {
-  const domains: ExpiringDomain[] = [];
-  const tlds = tld ? [tld] : ['.com', '.net', '.org', '.io'];
-  const now = Date.now();
-
-  const candidates: string[] = [];
-  
-  tlds.forEach(t => {
-    candidates.push(`${keyword}${t}`);
-    PREFIXES.forEach(prefix => {
-      candidates.push(`${prefix}${keyword}${t}`);
-    });
-    SUFFIXES.forEach(suffix => {
-      candidates.push(`${keyword}${suffix}${t}`);
-    });
-    candidates.push(`${keyword}2024${t}`);
-    candidates.push(`${keyword}pro${t}`);
-  });
-
-  const shuffled = candidates.sort(() => Math.random() - 0.5);
-  const selected = shuffled.slice(0, 12);
-
-  selected.forEach(domain => {
-    const domainTld = tlds.find(t => domain.endsWith(t)) || '.com';
-    const nameWithoutTld = domain.replace(domainTld, '');
-    const length = nameWithoutTld.length;
-
-    if (maxLength && length > maxLength) return;
-
-    const daysUntilExpiry = Math.floor(Math.random() * 30) + 1;
-    const expiryDate = new Date(now + daysUntilExpiry * 24 * 60 * 60 * 1000).toISOString();
-
-    let estimatedValue = 50;
-    if (length <= 4) estimatedValue = Math.floor(Math.random() * 500) + 500;
-    else if (length <= 6) estimatedValue = Math.floor(Math.random() * 300) + 200;
-    else if (length <= 8) estimatedValue = Math.floor(Math.random() * 150) + 100;
-    else estimatedValue = Math.floor(Math.random() * 50) + 50;
-
-    if (domainTld === '.com') estimatedValue *= 2;
-    else if (domainTld === '.io') estimatedValue *= 1.5;
-
-    domains.push({
-      name: domain,
-      tld: domainTld,
-      expiryDate,
-      estimatedValue: Math.round(estimatedValue),
-      length,
-    });
-  });
-
-  return domains.sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
-}
+const MIN_SCORE_OPTIONS = [
+  { value: '', label: 'Any Score' },
+  { value: '20', label: 'Score 20+' },
+  { value: '40', label: 'Score 40+' },
+  { value: '60', label: 'Score 60+' },
+  { value: '80', label: 'Score 80+' },
+];
 
 export function Discover() {
   const { isAuthenticated } = useAuth();
   const [keyword, setKeyword] = useState('');
   const [tldFilter, setTldFilter] = useState('');
-  const [maxLength, setMaxLength] = useState('');
-  const [results, setResults] = useState<ExpiringDomain[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
-  const [watchlistLoading, setWatchlistLoading] = useState(false);
+  const [minScore, setMinScore] = useState('');
+  const [sortBy, setSortBy] = useState('score');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  
+  const [domains, setDomains] = useState<ExpiringDomain[]>([]);
+  const [stats, setStats] = useState<ExpiringDomainsStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
   const [selectedDomain, setSelectedDomain] = useState<ExpiringDomain | null>(null);
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+
+  const fetchDomains = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await getExpiringDomains({
+        keyword: keyword || undefined,
+        tld: tldFilter || undefined,
+        minScore: minScore ? parseInt(minScore) : undefined,
+        sortBy,
+        favoritesOnly,
+        limit: 100,
+      });
+      setDomains(response.domains);
+      setStats(response.stats);
+    } catch (err) {
+      setError('Failed to load domains. Make sure you have imported some data.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchWatchlist();
-    }
-  }, [isAuthenticated]);
+    fetchDomains();
+  }, [tldFilter, minScore, sortBy, favoritesOnly]);
 
-  const fetchWatchlist = async () => {
-    setWatchlistLoading(true);
-    try {
-      const mockWatchlist: WatchlistItem[] = [];
-      setWatchlist(mockWatchlist);
-    } catch (err) {
-      console.error('Failed to fetch watchlist:', err);
-    } finally {
-      setWatchlistLoading(false);
-    }
-  };
-
-  const handleSearch = async (e: FormEvent) => {
+  const handleSearch = (e: FormEvent) => {
     e.preventDefault();
-    if (!keyword.trim()) return;
-
-    setLoading(true);
-    setHasSearched(true);
-
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const domains = generateMockDomains(
-      keyword.trim().toLowerCase(),
-      tldFilter,
-      maxLength ? parseInt(maxLength) : 0
-    );
-    setResults(domains);
-    setLoading(false);
+    fetchDomains();
   };
 
-  const handleAddToWatchlist = (domain: ExpiringDomain) => {
-    const newItem: WatchlistItem = {
-      id: Date.now().toString(),
-      domain: domain.name,
-      expiryDate: domain.expiryDate,
-      addedAt: new Date().toISOString(),
-    };
-    setWatchlist(prev => [...prev, newItem]);
+  const handleToggleFavorite = async (domain: ExpiringDomain) => {
+    if (!isAuthenticated) return;
+    try {
+      const updated = await toggleExpiringDomainFavorite(domain.id);
+      setDomains(prev => prev.map(d => d.id === domain.id ? updated : d));
+      if (selectedDomain?.id === domain.id) {
+        setSelectedDomain(updated);
+      }
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+    }
   };
 
-  const handleRemoveFromWatchlist = (id: string) => {
-    setWatchlist(prev => prev.filter(item => item.id !== id));
+  const handleSaveNote = async () => {
+    if (!selectedDomain || !isAuthenticated) return;
+    setSavingNote(true);
+    try {
+      const updated = await updateExpiringDomainNotes(selectedDomain.id, noteText);
+      setDomains(prev => prev.map(d => d.id === selectedDomain.id ? updated : d));
+      setSelectedDomain(updated);
+    } catch (err) {
+      console.error('Failed to save note:', err);
+    } finally {
+      setSavingNote(false);
+    }
   };
 
-  const isInWatchlist = (domainName: string) => {
-    return watchlist.some(item => item.domain === domainName);
-  };
-
-  const handleRegisterClick = (domain: ExpiringDomain) => {
+  const openDetailModal = (domain: ExpiringDomain) => {
     setSelectedDomain(domain);
-    setShowRegisterModal(true);
+    setNoteText(domain.notes || '');
+    setShowDetailModal(true);
   };
 
   const getRegistrarLinks = (domain: string) => [
     { name: 'GoDaddy', url: `https://www.godaddy.com/domainsearch/find?domainToCheck=${domain}` },
     { name: 'Namecheap', url: `https://www.namecheap.com/domains/registration/results/?domain=${domain}` },
     { name: 'Porkbun', url: `https://porkbun.com/checkout/search?q=${domain}` },
-    { name: 'Dynadot', url: `https://www.dynadot.com/domain/search?domain=${domain}` },
+    { name: 'DropCatch', url: `https://www.dropcatch.com/domain/${domain.split('.')[0]}` },
   ];
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
+  const getScoreBadge = (score: number): 'success' | 'warning' | 'neutral' => {
+    if (score >= 60) return 'success';
+    if (score >= 40) return 'warning';
+    return 'neutral';
   };
 
-  const getDaysUntilExpiry = (expiryDate: string) => {
-    const days = Math.ceil((new Date(expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-    return days;
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '—';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const getDaysUntilDrop = (dateString: string | null) => {
+    if (!dateString) return null;
+    const dropDate = new Date(dateString);
+    const now = new Date();
+    const diffTime = dropDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const getDropUrgency = (days: number | null): 'error' | 'warning' | 'info' | 'neutral' => {
+    if (days === null) return 'neutral';
+    if (days <= 3) return 'error';
+    if (days <= 7) return 'warning';
+    if (days <= 14) return 'info';
+    return 'neutral';
   };
 
   return (
     <div className="section">
       <div className="container-wide">
         <div className="mb-8">
-          <h1 className="page-title mb-2">Find Expiring Domains</h1>
-          <p className="text-lg text-slate-600 mb-4">
-            Discover valuable domains about to expire. Register for ~$12, flip for $100-$1000+
+          <h1 className="page-title mb-2">Discover Expiring Domains</h1>
+          <p className="text-lg text-slate-600">
+            Find valuable domains about to expire. Filter by score, backlinks, and more.
           </p>
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-            <h3 className="font-semibold text-slate-800 mb-2">How Domain Flipping Works</h3>
-            <ol className="text-sm text-slate-600 space-y-1 list-decimal list-inside">
-              <li>Find expiring domains with valuable characteristics (short, memorable, .com)</li>
-              <li>Register them for standard registration cost (~$10-15)</li>
-              <li>List them for sale on marketplaces or directly to buyers</li>
-              <li>Profit from the difference between registration and sale price</li>
-            </ol>
-          </div>
         </div>
 
+        {/* Stats Cards */}
+        {stats && stats.total > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <Card className="text-center">
+              <p className="text-2xl font-bold text-slate-800">{stats.total.toLocaleString()}</p>
+              <p className="text-sm text-slate-500">Total Domains</p>
+            </Card>
+            <Card className="text-center">
+              <p className="text-2xl font-bold text-yellow-600">{stats.favorites}</p>
+              <p className="text-sm text-slate-500">Favorites</p>
+            </Card>
+            <Card className="text-center">
+              <p className="text-2xl font-bold text-emerald-600">{stats.high_backlinks}</p>
+              <p className="text-sm text-slate-500">High Backlinks (100+)</p>
+            </Card>
+            <Card className="text-center">
+              <p className="text-2xl font-bold text-blue-600">{stats.high_tf}</p>
+              <p className="text-sm text-slate-500">High TF (20+)</p>
+            </Card>
+          </div>
+        )}
+
+        {/* Filters */}
         <form onSubmit={handleSearch} className="card mb-8">
-          <h2 className="font-semibold text-slate-800 mb-4">Search Expiring Domains</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <div className="md:col-span-1">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div className="md:col-span-2">
               <Input
-                label="Keyword"
-                placeholder="e.g., crypto, fitness, ai"
+                label="Search"
+                placeholder="Keyword in domain..."
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
               />
@@ -223,214 +207,318 @@ export function Discover() {
             </div>
             <div>
               <Select
-                label="Max Length"
-                options={MAX_LENGTH_OPTIONS}
-                value={maxLength}
-                onChange={(e) => setMaxLength(e.target.value)}
+                label="Min Score"
+                options={MIN_SCORE_OPTIONS}
+                value={minScore}
+                onChange={(e) => setMinScore(e.target.value)}
               />
             </div>
-            <div className="flex items-end">
-              <Button type="submit" loading={loading} className="w-full">
-                Search Domains
+            <div>
+              <Select
+                label="Sort By"
+                options={SORT_OPTIONS}
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <Button type="submit" className="flex-1">
+                Search
               </Button>
             </div>
           </div>
+          <div className="mt-4 flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={favoritesOnly}
+                onChange={(e) => setFavoritesOnly(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              Favorites only
+            </label>
+            {stats?.byTld && stats.byTld.length > 0 && (
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                <span>Top TLDs:</span>
+                {stats.byTld.slice(0, 5).map(t => (
+                  <button
+                    key={t.tld}
+                    type="button"
+                    onClick={() => setTldFilter(t.tld)}
+                    className={`px-2 py-0.5 rounded text-xs ${tldFilter === t.tld ? 'bg-slate-800 text-white' : 'bg-slate-100 hover:bg-slate-200'}`}
+                  >
+                    .{t.tld} ({t.count})
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </form>
 
-        {isAuthenticated && watchlist.length > 0 && (
-          <div className="card mb-8">
-            <h2 className="font-semibold text-slate-800 mb-4">Your Watchlist</h2>
-            <div className="space-y-3">
-              {watchlistLoading ? (
-                <div className="skeleton h-16 w-full" />
-              ) : (
-                watchlist.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
-                  >
-                    <div>
-                      <p className="font-medium text-slate-800">{item.domain}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant={getDaysUntilExpiry(item.expiryDate) <= 3 ? 'error' : 'warning'}>
-                          {getDaysUntilExpiry(item.expiryDate)} days left
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <Timer endDate={item.expiryDate} className="text-sm" />
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handleRemoveFromWatchlist(item.id)}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
+        {/* Results */}
         {loading ? (
-          <div className="grid-cards">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="card">
-                <div className="skeleton h-6 w-20 mb-4" />
-                <div className="skeleton h-6 w-full mb-2" />
-                <div className="skeleton h-4 w-3/4 mb-4" />
-                <div className="skeleton h-4 w-1/2" />
-              </div>
+          <div className="space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="skeleton h-20 w-full" />
             ))}
           </div>
-        ) : !hasSearched ? (
-          <div className="text-center py-12">
-            <p className="text-lg text-slate-600 mb-2">Enter a keyword to find expiring domains</p>
-            <p className="text-slate-500">We'll show you domains expiring in the next 30 days.</p>
-          </div>
-        ) : results.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-lg text-slate-600 mb-4">No expiring domains found for "{keyword}".</p>
-            <p className="text-slate-500">Try a different keyword or adjust your filters.</p>
-          </div>
+        ) : error ? (
+          <Card className="text-center py-12">
+            <p className="text-slate-600 mb-4">{error}</p>
+            <div className="bg-slate-50 rounded-lg p-4 max-w-md mx-auto text-left">
+              <p className="text-sm font-medium text-slate-700 mb-2">To get started:</p>
+              <ol className="text-sm text-slate-600 list-decimal list-inside space-y-1">
+                <li>Download a CSV from <a href="https://www.expireddomains.net" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">ExpiredDomains.net</a></li>
+                <li>Save it to <code className="bg-slate-100 px-1 rounded">server/data/</code></li>
+                <li>Run: <code className="bg-slate-100 px-1 rounded">node scripts/import-domains.js data/your-file.csv</code></li>
+              </ol>
+            </div>
+          </Card>
+        ) : domains.length === 0 ? (
+          <Card className="text-center py-12">
+            <p className="text-lg text-slate-600 mb-2">No domains found</p>
+            <p className="text-slate-500">Try adjusting your filters or import more data.</p>
+          </Card>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-slate-800">
-                {results.length} Expiring Domains Found
-              </h2>
-              <p className="text-sm text-slate-500">Sorted by expiry date</p>
-            </div>
-            <div className="grid-cards">
-              {results.map((domain) => (
-                <Card key={domain.name} hover className="flex flex-col h-full">
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <Badge variant="info">{domain.tld}</Badge>
-                    <Badge variant={getDaysUntilExpiry(domain.expiryDate) <= 3 ? 'error' : 'warning'}>
-                      {getDaysUntilExpiry(domain.expiryDate)} days
-                    </Badge>
-                  </div>
-
-                  <h3 className="text-lg font-semibold text-slate-800 mb-2">
-                    {domain.name}
-                  </h3>
-
-                  <div className="flex gap-4 text-sm text-slate-500 mb-4">
-                    <span>{domain.length} chars</span>
-                    <span>•</span>
-                    <span>Est. Value: <span className="text-emerald-600 font-medium">{formatCurrency(domain.estimatedValue)}</span></span>
-                  </div>
-
-                  <div className="mt-auto pt-4 border-t border-slate-100">
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="text-sm text-slate-500">Registration Cost</span>
-                      <span className="font-medium text-slate-800">~$12</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => handleRegisterClick(domain)}
-                      >
-                        Register Now
-                      </Button>
-                      {isAuthenticated && (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleAddToWatchlist(domain)}
-                          disabled={isInWatchlist(domain.name)}
-                        >
-                          {isInWatchlist(domain.name) ? 'Watching' : 'Watch'}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              ))}
+            <p className="text-sm text-slate-500 mb-4">
+              Showing {domains.length} domains
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 text-left text-sm text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Domain</th>
+                    <th className="px-4 py-3 font-medium">Score</th>
+                    <th className="px-4 py-3 font-medium">Backlinks</th>
+                    <th className="px-4 py-3 font-medium">Ref Domains</th>
+                    <th className="px-4 py-3 font-medium">TF</th>
+                    <th className="px-4 py-3 font-medium">DA</th>
+                    <th className="px-4 py-3 font-medium">Age</th>
+                    <th className="px-4 py-3 font-medium">Drops In</th>
+                    <th className="px-4 py-3 font-medium">Why Interesting</th>
+                    <th className="px-4 py-3 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {domains.map((domain) => (
+                    <tr key={domain.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleToggleFavorite(domain)}
+                            className={`text-lg ${domain.is_favorite ? 'text-yellow-500' : 'text-slate-300 hover:text-yellow-400'}`}
+                            title={domain.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+                          >
+                            {domain.is_favorite ? '★' : '☆'}
+                          </button>
+                          <span className="font-medium text-slate-800">{domain.domain}</span>
+                          {domain.notes && (
+                            <span className="text-blue-500 text-xs" title={domain.notes}>📝</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant={getScoreBadge(domain.score)}>
+                          {domain.score}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {domain.backlinks.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {domain.referring_domains.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{domain.majestic_tf}</td>
+                      <td className="px-4 py-3 text-slate-600">{domain.moz_da}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {domain.archive_org_age ? `${domain.archive_org_age}y` : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const days = getDaysUntilDrop(domain.delete_date);
+                          if (days === null) return <span className="text-slate-400">—</span>;
+                          return (
+                            <div className="flex flex-col">
+                              <Badge variant={getDropUrgency(days)}>
+                                {days <= 0 ? 'Dropped!' : `${days} days`}
+                              </Badge>
+                              <span className="text-xs text-slate-500 mt-1">
+                                {formatDate(domain.delete_date)}
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 max-w-xs truncate" title={domain.why_interesting || ''}>
+                        {domain.why_interesting || '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => openDetailModal(domain)}>
+                            Details
+                          </Button>
+                          <a
+                            href={`https://www.namecheap.com/domains/registration/results/?domain=${domain.domain}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Button size="sm">Register</Button>
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </>
         )}
 
+        {/* Tips Section */}
         <div className="mt-12 bg-emerald-50 border border-emerald-200 rounded-lg p-6">
-          <h2 className="font-semibold text-emerald-800 mb-4">Tips for Finding Valuable Domains</h2>
-          <div className="grid md:grid-cols-2 gap-6">
+          <h2 className="font-semibold text-emerald-800 mb-4">Understanding the Metrics</h2>
+          <div className="grid md:grid-cols-2 gap-6 text-sm">
             <div>
-              <h3 className="font-medium text-emerald-700 mb-2">What Makes a Domain Valuable</h3>
-              <ul className="text-sm text-emerald-700 space-y-1 list-disc list-inside">
-                <li><strong>Short length</strong> - 4-6 character domains are premium</li>
-                <li><strong>.com TLD</strong> - Most valuable and recognized extension</li>
-                <li><strong>Memorable</strong> - Easy to spell and remember</li>
-                <li><strong>Trending keywords</strong> - AI, crypto, tech, health</li>
-                <li><strong>Brandable</strong> - Could work as a company name</li>
+              <h3 className="font-medium text-emerald-700 mb-2">SEO Metrics</h3>
+              <ul className="text-emerald-700 space-y-1">
+                <li><strong>Score:</strong> Our combined quality score (0-100)</li>
+                <li><strong>Backlinks:</strong> Total links pointing to domain</li>
+                <li><strong>Ref Domains:</strong> Unique websites linking to domain</li>
+                <li><strong>TF:</strong> Majestic Trust Flow (quality of backlinks)</li>
+                <li><strong>DA:</strong> Moz Domain Authority (ranking potential)</li>
               </ul>
             </div>
             <div>
-              <h3 className="font-medium text-emerald-700 mb-2">Pro Tips</h3>
-              <ul className="text-sm text-emerald-700 space-y-1 list-disc list-inside">
-                <li>Set up alerts for domains you're watching</li>
-                <li>Research comparable sales on NameBio.com</li>
-                <li>Consider renewal costs in your ROI calculation</li>
-                <li>List on multiple marketplaces for exposure</li>
-                <li>Be patient - good domains can take months to sell</li>
+              <h3 className="font-medium text-emerald-700 mb-2">What to Look For</h3>
+              <ul className="text-emerald-700 space-y-1">
+                <li>Score 60+ = Excellent opportunity</li>
+                <li>TF &gt; CF = Quality over quantity (good)</li>
+                <li>Age 10+ years = Established domain</li>
+                <li>.com with backlinks = Most valuable</li>
               </ul>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <p className="text-sm text-amber-800">
-            <strong>MVP Notice:</strong> Domain expiry data shown is simulated for demonstration purposes. 
-            In production, this would connect to expiring domain APIs like ExpiredDomains.net or DropCatch.
-          </p>
-        </div>
-
+        {/* Detail Modal */}
         <Modal
-          isOpen={showRegisterModal}
-          onClose={() => setShowRegisterModal(false)}
-          title="Register Domain"
-          footer={<Button variant="secondary" onClick={() => setShowRegisterModal(false)}>Close</Button>}
+          isOpen={showDetailModal}
+          onClose={() => setShowDetailModal(false)}
+          title="Domain Details"
         >
           {selectedDomain && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="bg-slate-50 rounded-lg p-4">
-                <p className="text-lg font-semibold text-slate-800">{selectedDomain.name}</p>
-                <div className="flex gap-4 mt-2 text-sm">
-                  <span className="text-slate-600">Length: {selectedDomain.length} chars</span>
-                  <span className="text-emerald-600 font-medium">
-                    Est. Value: {formatCurrency(selectedDomain.estimatedValue)}
-                  </span>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xl font-bold text-slate-800">{selectedDomain.domain}</h3>
+                  <Badge variant={getScoreBadge(selectedDomain.score)}>
+                    Score: {selectedDomain.score}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-slate-500">Backlinks</p>
+                    <p className="font-medium">{selectedDomain.backlinks.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Ref Domains</p>
+                    <p className="font-medium">{selectedDomain.referring_domains.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Trust Flow</p>
+                    <p className="font-medium">{selectedDomain.majestic_tf}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Citation Flow</p>
+                    <p className="font-medium">{selectedDomain.majestic_cf}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Domain Authority</p>
+                    <p className="font-medium">{selectedDomain.moz_da}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Archive Age</p>
+                    <p className="font-medium">
+                      {selectedDomain.archive_org_age ? `${selectedDomain.archive_org_age} years` : '—'}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                <p className="text-sm text-emerald-800">
-                  <strong>Potential Profit:</strong> Register for ~$12, estimated flip value {formatCurrency(selectedDomain.estimatedValue)}
-                </p>
+              {/* Notes */}
+              {isAuthenticated && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Your Notes
+                  </label>
+                  <textarea
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    rows={3}
+                    placeholder="Add notes about this domain..."
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleSaveNote}
+                    loading={savingNote}
+                    className="mt-2"
+                  >
+                    Save Notes
+                  </Button>
+                </div>
+              )}
+
+              {/* Research Links */}
+              <div>
+                <p className="text-sm font-medium text-slate-700 mb-2">Research</p>
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={`https://web.archive.org/web/*/${selectedDomain.domain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Wayback Machine →
+                  </a>
+                  <a
+                    href={`https://www.semrush.com/analytics/overview/?q=${selectedDomain.domain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    SEMrush →
+                  </a>
+                  <a
+                    href={`https://ahrefs.com/site-explorer?target=${selectedDomain.domain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Ahrefs →
+                  </a>
+                </div>
               </div>
 
+              {/* Register Links */}
               <div>
-                <p className="text-sm font-medium text-slate-700 mb-3">Register with a trusted registrar:</p>
+                <p className="text-sm font-medium text-slate-700 mb-2">Register / Backorder</p>
                 <div className="grid grid-cols-2 gap-2">
-                  {getRegistrarLinks(selectedDomain.name).map((registrar) => (
+                  {getRegistrarLinks(selectedDomain.domain).map((registrar) => (
                     <a
                       key={registrar.name}
                       href={registrar.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="btn btn-secondary text-center"
+                      className="btn btn-secondary text-center text-sm"
                     >
                       {registrar.name}
                     </a>
                   ))}
                 </div>
               </div>
-
-              <p className="text-sm text-slate-500">
-                After registering, you can list your domain for sale on Opportunity Exchange.
-              </p>
             </div>
           )}
         </Modal>

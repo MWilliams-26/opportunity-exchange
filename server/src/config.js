@@ -41,13 +41,6 @@ const config = {
     authMax: 10, // stricter for auth endpoints
     searchMax: 30, // DNS lookups
   },
-
-  stripe: {
-    secretKey: process.env.STRIPE_SECRET_KEY,
-    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
-    successUrl: process.env.STRIPE_SUCCESS_URL || 'http://localhost:5173/dashboard?success=true',
-    cancelUrl: process.env.STRIPE_CANCEL_URL || 'http://localhost:5173/marketplace?cancelled=true',
-  },
 };
 
 if (config.isProd && config.jwt.secret.length < 32) {

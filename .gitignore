@@ -26,6 +26,9 @@ server/data/
 .DS_Store
 Thumbs.db
 
+# VS Code local history
+.history/
+
 # Logs
 *.log
 npm-debug.log*

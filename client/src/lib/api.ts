@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios';
-import type { Asset, Listing, Bid, AuthResponse, User, DomainSearchResult, SearchResponse, ApiError, BrandableName, WatchlistItem, Category } from '../types';
+import type { AuthResponse, User, DomainSearchResult, SearchResponse, ApiError, WatchlistItem, ExpiringDomain, ExpiringDomainsStats } from '../types';
 
 const api = axios.create({
   baseURL: 'http://localhost:3001/api',
@@ -76,24 +76,7 @@ export const getMe = async (): Promise<User> => {
   return data;
 };
 
-// Assets
-export interface AssetFilters {
-  keyword?: string;
-  type?: string;
-  category?: string;
-  maxPrice?: number;
-}
-
-export const getAssets = async (filters?: AssetFilters): Promise<Asset[]> => {
-  const { data } = await api.get('/assets', { params: filters });
-  return data;
-};
-
-export const getAsset = async (id: string): Promise<Asset> => {
-  const { data } = await api.get(`/assets/${id}`);
-  return data;
-};
-
+// Domain Search
 export const searchDomains = async (keyword: string): Promise<SearchResponse> => {
   const { data } = await api.get('/assets/search', { params: { keyword } });
   return data;
@@ -101,95 +84,6 @@ export const searchDomains = async (keyword: string): Promise<SearchResponse> =>
 
 export const checkDomain = async (domain: string): Promise<DomainSearchResult> => {
   const { data } = await api.get('/assets/check', { params: { domain } });
-  return data;
-};
-
-// Listings
-export interface ListingFilters {
-  listing_type?: string;
-  status?: string;
-  user_id?: string;
-}
-
-export const getListings = async (filters?: ListingFilters): Promise<Listing[]> => {
-  const { data } = await api.get('/listings', { params: filters });
-  return data;
-};
-
-export const getListing = async (id: string): Promise<Listing> => {
-  const { data } = await api.get(`/listings/${id}`);
-  return data;
-};
-
-export const getMyListings = async (): Promise<Listing[]> => {
-  const { data } = await api.get('/users/me/listings');
-  return data;
-};
-
-export interface CreateListingData {
-  asset_name: string;
-  asset_type: 'domain' | 'business_name';
-  asset_description?: string;
-  category_id?: number;
-  title: string;
-  description: string;
-  listing_type: 'buy_now' | 'auction';
-  buy_now_price?: number;
-  starting_bid?: number;
-  auction_end_date?: string;
-  contact_email?: string;
-}
-
-export const createListing = async (listingData: CreateListingData): Promise<Listing> => {
-  const { data } = await api.post('/listings', listingData);
-  return data;
-};
-
-export const updateListing = async (id: string, listingData: Partial<CreateListingData>): Promise<Listing> => {
-  const { data } = await api.put(`/listings/${id}`, listingData);
-  return data;
-};
-
-export const deleteListing = async (id: string): Promise<void> => {
-  await api.delete(`/listings/${id}`);
-};
-
-// Bids
-export const getBidsForListing = async (listingId: string): Promise<Bid[]> => {
-  const { data } = await api.get(`/listings/${listingId}/bids`);
-  return data;
-};
-
-export const placeBid = async (listingId: string, amount: number): Promise<Bid> => {
-  const { data } = await api.post(`/listings/${listingId}/bids`, { amount });
-  return data;
-};
-
-// Brandable Names
-export interface BrandableNameFilters {
-  category?: string;
-  minPrice?: number;
-  maxPrice?: number;
-  sort?: 'newest' | 'price_asc' | 'price_desc';
-}
-
-export const getBrandableNames = async (filters?: BrandableNameFilters): Promise<BrandableName[]> => {
-  const { data } = await api.get('/brandable-names', { params: filters });
-  return data;
-};
-
-export const getMyBrandableNames = async (): Promise<BrandableName[]> => {
-  const { data } = await api.get('/users/me/brandable-names');
-  return data;
-};
-
-export const deleteBrandableName = async (id: number): Promise<void> => {
-  await api.delete(`/brandable-names/${id}`);
-};
-
-// Categories
-export const getCategories = async (): Promise<Category[]> => {
-  const { data } = await api.get('/categories');
   return data;
 };
 
@@ -215,56 +109,49 @@ export const removeFromWatchlist = async (id: number): Promise<void> => {
   await api.delete(`/watchlist/${id}`);
 };
 
-// Brandable Names - Create
-export interface CreateBrandableNameData {
-  name: string;
-  description?: string;
-  category_id?: number;
-  suggested_price: number;
-  domain_available?: boolean;
+// Expiring Domains
+export interface ExpiringDomainsFilters {
+  keyword?: string;
+  tld?: string;
+  minBacklinks?: number;
+  minScore?: number;
+  minTF?: number;
+  favoritesOnly?: boolean;
+  status?: string;
+  sortBy?: string;
+  sortOrder?: 'ASC' | 'DESC';
+  limit?: number;
+  offset?: number;
 }
 
-export const createBrandableName = async (data: CreateBrandableNameData): Promise<BrandableName> => {
-  const { data: result } = await api.post('/brandable-names', data);
-  return result;
-};
+export interface ExpiringDomainsResponse {
+  domains: ExpiringDomain[];
+  stats: ExpiringDomainsStats;
+  filters: ExpiringDomainsFilters;
+}
 
-export const getBrandableName = async (id: string): Promise<BrandableName> => {
-  const { data } = await api.get(`/brandable-names/${id}`);
+export const getExpiringDomains = async (filters?: ExpiringDomainsFilters): Promise<ExpiringDomainsResponse> => {
+  const { data } = await api.get('/expiring-domains', { params: filters });
   return data;
 };
 
-// Payments
-export const createCheckoutSession = async (brandableNameId: number): Promise<{ sessionId: string; url: string }> => {
-  const { data } = await api.post('/payments/create-checkout-session', { brandable_name_id: brandableNameId });
+export const getExpiringDomainStats = async (): Promise<ExpiringDomainsStats> => {
+  const { data } = await api.get('/expiring-domains/stats');
   return data;
 };
 
-export interface Transaction {
-  id: number;
-  brandable_name_id: number | null;
-  listing_id: number | null;
-  seller_id: number;
-  buyer_id: number;
-  sale_price: number;
-  platform_fee: number;
-  seller_payout: number;
-  status: string;
-  created_at: string;
-  item_name?: string;
-}
+export const toggleExpiringDomainFavorite = async (id: number): Promise<ExpiringDomain> => {
+  const { data } = await api.post(`/expiring-domains/${id}/favorite`);
+  return data;
+};
 
-export interface TransactionsResponse {
-  transactions: Transaction[];
-  summary: {
-    total_earnings: number;
-    total_spent: number;
-    pending_payouts: number;
-  };
-}
+export const updateExpiringDomainNotes = async (id: number, notes: string): Promise<ExpiringDomain> => {
+  const { data } = await api.put(`/expiring-domains/${id}/notes`, { notes });
+  return data;
+};
 
-export const getMyTransactions = async (): Promise<TransactionsResponse> => {
-  const { data } = await api.get('/payments/transactions');
+export const updateExpiringDomainStatus = async (id: number, status: string): Promise<ExpiringDomain> => {
+  const { data } = await api.put(`/expiring-domains/${id}/status`, { status });
   return data;
 };
 

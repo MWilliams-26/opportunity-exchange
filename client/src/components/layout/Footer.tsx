@@ -8,21 +8,18 @@ export function Footer() {
           <div className="md:col-span-2">
             <h3 className="text-lg font-bold text-white mb-4">Opportunity Exchange</h3>
             <p className="text-sm text-slate-400 max-w-md">
-              A marketplace for discovering and acquiring intellectual property assets 
-              including patents, trademarks, domains, and licenses.
+              Discover expiring domains and undervalued digital assets before anyone else.
+              Track, monitor, and acquire opportunities at the right time.
             </p>
           </div>
           <div>
             <h4 className="text-sm font-semibold text-white mb-4">Platform</h4>
             <nav className="flex flex-col gap-2">
               <Link to="/discover" className="text-sm hover:text-white transition-colors">
-                Discover Assets
+                Discover Domains
               </Link>
-              <Link to="/marketplace" className="text-sm hover:text-white transition-colors">
-                Marketplace
-              </Link>
-              <Link to="/create-listing" className="text-sm hover:text-white transition-colors">
-                Create Listing
+              <Link to="/dashboard" className="text-sm hover:text-white transition-colors">
+                My Watchlist
               </Link>
             </nav>
           </div>
@@ -35,9 +32,6 @@ export function Footer() {
               <Link to="/register" className="text-sm hover:text-white transition-colors">
                 Register
               </Link>
-              <Link to="/dashboard" className="text-sm hover:text-white transition-colors">
-                Dashboard
-              </Link>
             </nav>
           </div>
         </div>
@@ -45,12 +39,11 @@ export function Footer() {
         <div className="mt-12 pt-8 border-t border-slate-700">
           <div className="bg-slate-700/50 rounded-lg p-4 mb-6">
             <p className="text-xs text-slate-400">
-              <strong className="text-slate-300">Disclaimer:</strong> Opportunity Exchange is 
-              a marketplace platform that connects buyers and sellers of intellectual property 
-              assets. We do not guarantee the validity, ownership, or value of any listed assets. 
-              Users are responsible for conducting their own due diligence before any transaction. 
-              All listings are user-generated and Opportunity Exchange is not responsible for 
-              their accuracy.
+              <strong className="text-slate-300">Disclaimer:</strong> Opportunity Exchange provides 
+              domain availability information for research purposes. We do not guarantee domain 
+              availability or registration success. Domain expiry dates are estimates based on 
+              publicly available WHOIS data. Users are responsible for verifying information 
+              and conducting due diligence before any domain acquisition.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
